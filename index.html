@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五院大亂鬥 - citizengame0602</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & Babel for Browser Rendering -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // Mocking ES Modules for Browser
+        const Lucide = window.lucide;
+        const { Swords: LucideSwords, Zap: LucideZap, Crosshair: LucideCrosshair, Skull: LucideSkull, Users: LucideUsers, LogOut: LucideLogOut, Play: LucidePlay, AlertCircle: LucideAlertCircle } = Lucide;
+
+        // Firebase is loaded via CDN in a bit, let's use the compat version for easiest browser use
+    </script>
+
+    <!-- Firebase SDKs (Compat version for easier browser script usage) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <script type="text/babel">
+        // --- Firebase 初始化 ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyCIuwZeqeIaqg0Mrp2XjCf7b98lNwS_bhY",
+          authDomain: "citizengame0602.firebaseapp.com",
+          projectId: "citizengame0602",
+          storageBucket: "citizengame0602.firebasestorage.app",
+          messagingSenderId: "1016120027651",
+          appId: "1:1016120027651:web:70fd0aa0a1a79eaae6bc36",
+          measurementId: "G-FZLKK4YZ43"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const appId = 'citizengame0602';
+
+        // --- 遊戲資料庫 ---
+        const INITIAL_HP = 100;
+
+        const YUAN_DB = [
+          { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
+          { id: 'legislative', name: '立法院', color: 'bg-emerald-500', text: 'text-emerald-500' },
+          { id: 'judicial', name: '司法院', color: 'bg-amber-500', text: 'text-amber-500' },
+          { id: 'examination', name: '考試院', color: 'bg-purple-500', text: 'text-purple-500' },
+          { id: 'control', name: '監察院', color: 'bg-rose-500', text: 'text-rose-500' }
+        ];
+
+        const CARD_POOL = [
+          { id: 'c1', name: '【SSR】覆議卡', desc: '指定攻擊：扣除目標 25 HP', type: 'target', dmg: 25, heal: 0, rarity: 'text-yellow-400' },
+          { id: 'c2', name: '【SSR】倒閣卡', desc: '吸血攻擊：吸取目標 15 HP', type: 'target', dmg: 15, heal: 15, rarity: 'text-yellow-400' },
+          { id: 'c3', name: '【SR】違憲審查', desc: '範圍攻擊：其餘所有人扣 10 HP', type: 'aoe', dmg: 10, heal: 0, rarity: 'text-purple-400' },
+          { id: 'c4', name: '【SR】彈劾糾舉', desc: '制裁霸主：全場血量最高者扣 20 HP', type: 'auto-highest', dmg: 20, heal: 0, rarity: 'text-purple-400' },
+          { id: 'c5', name: '【R】國家考試', desc: '自我庇護：自身回復 25 HP', type: 'self', dmg: 0, heal: 25, rarity: 'text-blue-400' }
+        ];
+
+        const QUESTION_BANK = [
+          { text: '提出「不信任案（倒閣）」是哪一個機關專屬的職權？', options: ['行政院', '立法院', '監察院'], answer: 1 },
+          { text: '總統發布緊急命令後，必須在幾天內提交哪個機關追認？', options: ['立法院 (10天內)', '司法院 (15天內)', '行政院 (7天內)'], answer: 0 },
+          { text: '小明亂丟垃圾被環保局開罰單。這屬於哪一種法律責任？', options: ['刑事責任', '民事責任', '行政責任'], answer: 2 },
+          { text: '人民權利受行政機關違法侵害時，應提起何種訴訟救濟？', options: ['民事訴訟', '行政訴訟', '刑事訴訟'], answer: 1 },
+          { text: '立院三讀通過法案，行政院覺得難以執行，下一步合法反擊是？', options: ['宣告法案無效', '移請立法院覆議', '解散立法院'], answer: 1 },
+          { text: '警方無搜索票強行進入民宅搜查，屋主可主張警方侵犯了什麼權利？', options: ['財產權', '隱私權', '平等權'], answer: 1 },
+          { text: '法官判決肇事者需賠償家屬100萬。這體現了何種法律功能？', options: ['威嚇犯罪', '解決紛爭，填補損害', '維護行政程序'], answer: 1 },
+          { text: '新聞：「某官員涉嫌貪污，遭檢方起訴。」這體現了什麼？', options: ['司法機關獨立追究刑事責任', '行政權對立法權的制衡', '監察權的彈劾功能'], answer: 0 },
+          { text: '為防範官員貪污，我國憲法設計哪兩個機關進行事後調查與懲處？', options: ['監察院調查，司法院審理', '立法院調查，行政院審理', '考試院調查，監察院審理'], answer: 0 },
+          { text: '若要制定保障「表意自由」的校規，下列何者最合理且不矛盾？', options: ['學生可任意發言，不受任何校規限制', '可組社團，但需登記且不得違反公序良俗', '只有成績優異者才有權利發表意見'], answer: 1 },
+          { text: '「班會多數決同意把某同學趕出教室。」這違背了什麼民主原則？', options: ['權力分立', '多數決不能侵犯少數基本權利', '誠實信用原則'], answer: 1 },
+          { text: '學校規定「成績不到80分禁止參加社團」。此規定最大的瑕疵是？', options: ['違反權力分立', '違反隱私權', '違反平等原則與比例原則'], answer: 2 }
+        ];
+
+        const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
+
+        function App() {
+          const [user, setUser] = useState(null);
+          const [isConnecting, setIsConnecting] = useState(true);
+          const [roomCode, setRoomCode] = useState('');
+          const [roomData, setRoomData] = useState(null);
+          const [myRole, setMyRole] = useState(null);
+          const [joinInput, setJoinInput] = useState('');
+          const [errorMsg, setErrorMsg] = useState('');
+
+          const showError = (msg) => setErrorMsg(msg);
+
+          useEffect(() => {
+            auth.signInAnonymously().catch(e => {
+              console.error(e);
+              showError("Firebase 匿名登入失敗，請確認已啟用 Anonymous Auth。");
+            });
+            const unsubscribe = auth.onAuthStateChanged((u) => {
+              setUser(u);
+              setIsConnecting(false);
+            });
+            return () => unsubscribe();
+          }, []);
+
+          useEffect(() => {
+            if (!user || !roomCode) return;
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const unsubscribe = roomRef.onSnapshot((docSnap) => {
+              if (docSnap.exists) {
+                setRoomData(docSnap.data());
+              } else {
+                showError("房間不存在或已關閉！");
+                setRoomCode('');
+                setMyRole(null);
+              }
+            });
+            return () => unsubscribe();
+          }, [user, roomCode]);
+
+          const createRoom = async () => {
+            const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(code);
+            const initialData = {
+              state: 'lobby', hostUid: user.uid,
+              teams: {
+                group1: { id: 'group1', name: '第 1 組', joined: false, yuan: null },
+                group2: { id: 'group2', name: '第 2 組', joined: false, yuan: null },
+                group3: { id: 'group3', name: '第 3 組', joined: false, yuan: null },
+                group4: { id: 'group4', name: '第 4 組', joined: false, yuan: null },
+                group5: { id: 'group5', name: '第 5 組', joined: false, yuan: null }
+              },
+              hp: { group1: INITIAL_HP, group2: INITIAL_HP, group3: INITIAL_HP, group4: INITIAL_HP, group5: INITIAL_HP },
+              questions: shuffle(QUESTION_BANK),
+              qIndex: 0, buzzerWinner: null, drawnCard: null,
+              actionLog: ['🎯 遊戲房間已建立']
+            };
+            await roomRef.set(initialData);
+            setRoomCode(code);
+            setMyRole('host');
+          };
+
+          const joinRoom = async () => {
+            const code = joinInput.toUpperCase();
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(code);
+            const snap = await roomRef.get();
+            if (snap.exists) setRoomCode(code);
+            else showError("找不到房間！");
+          };
+
+          const selectGroup = async (groupId) => {
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            await roomRef.update({
+              [`teams.${groupId}.joined`]: true,
+              [`teams.${groupId}.uid`]: user.uid
+            });
+            setMyRole(groupId);
+          };
+
+          const startGame = async () => {
+            const shuffledYuans = shuffle(YUAN_DB);
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const updates = { state: 'playing', actionLog: ['🎲 遊戲開始！', ...roomData.actionLog].slice(0, 5) };
+            Object.keys(roomData.teams).forEach((id, idx) => { updates[`teams.${id}.yuan`] = shuffledYuans[idx]; });
+            await roomRef.update(updates);
+          };
+
+          const handleBuzz = async () => {
+            if (roomData.buzzerWinner) return;
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            await roomRef.update({ buzzerWinner: myRole });
+          };
+
+          const handleAnswer = async (idx) => {
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const currentQ = roomData.questions[roomData.qIndex];
+            if (idx === currentQ.answer) {
+              const card = shuffle(CARD_POOL)[0];
+              await roomRef.update({
+                state: 'gacha', drawnCard: card,
+                actionLog: [`✨ ${roomData.teams[myRole].yuan.name} 答對了！`, ...roomData.actionLog].slice(0, 5)
+              });
+              if (card.type !== 'target') setTimeout(() => executeCardSkill(card, null), 2000);
+            } else {
+              await roomRef.update({
+                [`hp.${myRole}`]: Math.max(0, roomData.hp[myRole] - 15),
+                buzzerWinner: null,
+                actionLog: [`❌ ${roomData.teams[myRole].yuan.name} 答錯了！`, ...roomData.actionLog].slice(0, 5)
+              });
+              setTimeout(() => nextQuestion(), 2000);
+            }
+          };
+
+          const executeCardSkill = async (card, targetId) => {
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            let newHp = { ...roomData.hp };
+            let log = '';
+            if (card.type === 'target') {
+              newHp[targetId] -= card.dmg;
+              if (card.heal) newHp[roomData.buzzerWinner] += card.heal;
+              log = `💥 攻擊了 ${roomData.teams[targetId].yuan.name}`;
+            } else if (card.type === 'aoe') {
+              Object.keys(newHp).forEach(k => { if (k !== roomData.buzzerWinner) newHp[k] -= card.dmg; });
+              log = `🌋 全場範圍攻擊！`;
+            } else if (card.type === 'self') {
+              newHp[roomData.buzzerWinner] += card.heal;
+              log = `🛡️ 獲得治癒！`;
+            }
+            await roomRef.update({ hp: newHp, actionLog: [log, ...roomData.actionLog].slice(0, 5) });
+            setTimeout(() => nextQuestion(), 2000);
+          };
+
+          const nextQuestion = async () => {
+            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            if (roomData.qIndex + 1 < roomData.questions.length) {
+              await roomRef.update({ qIndex: roomData.qIndex + 1, buzzerWinner: null, drawnCard: null, state: 'playing' });
+            } else {
+              await roomRef.update({ state: 'end' });
+            }
+          };
+
+          // --- UI Rendering (Simplified for Demo) ---
+          if (isConnecting) return <div className="text-white p-10">連線中...</div>;
+
+          if (!roomCode) return (
+            <div className="flex flex-col items-center justify-center min-h-screen gap-10">
+                <h1 className="text-5xl font-black text-white">五院大亂鬥</h1>
+                <div className="flex gap-4">
+                    <button onClick={createRoom} className="bg-emerald-500 p-6 rounded-xl text-white font-bold">建立房間 (老師)</button>
+                    <div className="flex flex-col gap-2">
+                        <input value={joinInput} onChange={e=>setJoinInput(e.target.value)} placeholder="代碼" className="p-4 rounded border" />
+                        <button onClick={joinRoom} className="bg-blue-500 p-4 rounded text-white">加入 (學生)</button>
+                    </div>
+                </div>
+                {errorMsg && <div className="text-red-500 bg-red-100 p-4 rounded">{errorMsg}</div>}
+            </div>
+          );
+
+          if (roomData.state === 'lobby') return (
+            <div className="text-white flex flex-col items-center p-10 gap-10">
+                <h2 className="text-8xl font-black">{roomCode}</h2>
+                {myRole === 'host' ? <button onClick={startGame} className="bg-yellow-500 text-black p-6 rounded-full font-bold">開始遊戲</button> : <div>等待開始... (角色: {myRole || '未選擇'})</div>}
+                {!myRole && <div className="grid grid-cols-2 gap-2">{Object.values(roomData.teams).map(t => <button key={t.id} onClick={()=>selectGroup(t.id)} className="bg-slate-700 p-4 rounded">{t.name}</button>)}</div>}
+            </div>
+          );
+
+          return (
+            <div className="text-white p-4">
+                <div className="flex justify-between border-b pb-4">
+                    <span>房號: {roomCode}</span>
+                    <span>題數: {roomData.qIndex + 1}</span>
+                </div>
+                <div className="grid grid-cols-5 gap-2 my-4">
+                    {Object.values(roomData.teams).map(t => <div key={t.id} className={`${t.yuan?.color} p-2 rounded text-center`}>{t.yuan?.name}<br/>{roomData.hp[t.id]} HP</div>)}
+                </div>
+                <div className="bg-slate-800 p-10 rounded-3xl text-center">
+                    <h2 className="text-3xl font-bold mb-10">{roomData.questions[roomData.qIndex].text}</h2>
+                    <div className="grid gap-4">
+                        {roomData.questions[roomData.qIndex].options.map((o, i) => (
+                            <button key={i} onClick={()=>handleAnswer(i)} disabled={roomData.buzzerWinner !== myRole} className="bg-slate-700 p-4 rounded hover:bg-slate-600">
+                                {o}
+                            </button>
+                        ))}
+                    </div>
+                    {!myRole.includes('host') && roomData.state === 'playing' && !roomData.buzzerWinner && (
+                        <button onClick={handleBuzz} className="mt-10 bg-red-600 w-full p-10 rounded-full text-5xl font-black">搶答！</button>
+                    )}
+                </div>
+                <div className="mt-4 bg-black p-4 rounded h-32 overflow-y-auto">
+                    {roomData.actionLog.map((l, i) => <div key={i}>{l}</div>)}
+                </div>
+                {roomData.state === 'gacha' && roomData.drawnCard && (
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-10">
+                        <div className="bg-white text-black p-10 rounded-3xl text-center">
+                            <h2 className="text-4xl font-black mb-4">{roomData.drawnCard.name}</h2>
+                            <p className="mb-10">{roomData.drawnCard.desc}</p>
+                            {roomData.drawnCard.type === 'target' && myRole === roomData.buzzerWinner ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                    {Object.values(roomData.teams).map(t => <button key={t.id} onClick={()=>executeCardSkill(roomData.drawnCard, t.id)} className="bg-red-500 p-4 text-white rounded">{t.yuan?.name}</button>)}
+                                </div>
+                            ) : <div>生效中...</div>}
+                        </div>
+                    </div>
+                )}
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+        // Initialize Lucide icons after rendering
+        setTimeout(() => lucide.createIcons(), 1000);
+    </script>
+</body>
+</html>
