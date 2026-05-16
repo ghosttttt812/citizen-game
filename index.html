@@ -109,7 +109,7 @@
 
           useEffect(() => {
             if (!user || !roomCode) return;
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const roomRef = db.collection('rooms').doc(roomCode);
             const unsubscribe = roomRef.onSnapshot((docSnap) => {
               if (docSnap.exists) {
                 setRoomData(docSnap.data());
@@ -129,7 +129,7 @@
                 return;
               }
               const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-              const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(code);
+              const roomRef = db.collection('rooms').doc(code);
               const initialData = {
                 state: 'lobby', hostUid: user.uid,
                 teams: {
@@ -160,7 +160,7 @@
                 return;
               }
               const code = joinInput.toUpperCase();
-              const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(code);
+              const roomRef = db.collection('rooms').doc(code);
               const snap = await roomRef.get();
               if (snap.exists) setRoomCode(code);
               else showError("找不到房間！");
@@ -170,7 +170,7 @@
           };
 
           const selectGroup = async (groupId) => {
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const roomRef = db.collection('rooms').doc(roomCode);
             await roomRef.update({
               [`teams.${groupId}.joined`]: true,
               [`teams.${groupId}.uid`]: user.uid
@@ -180,7 +180,7 @@
 
           const startGame = async () => {
             const shuffledYuans = shuffle(YUAN_DB);
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const roomRef = db.collection('rooms').doc(roomCode);
             const updates = { state: 'playing', actionLog: ['🎲 遊戲開始！', ...roomData.actionLog].slice(0, 5) };
             Object.keys(roomData.teams).forEach((id, idx) => { updates[`teams.${id}.yuan`] = shuffledYuans[idx]; });
             await roomRef.update(updates);
@@ -188,12 +188,12 @@
 
           const handleBuzz = async () => {
             if (roomData.buzzerWinner) return;
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const roomRef = db.collection('rooms').doc(roomCode);
             await roomRef.update({ buzzerWinner: myRole });
           };
 
           const handleAnswer = async (idx) => {
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const roomRef = db.collection('rooms').doc(roomCode);
             const currentQ = roomData.questions[roomData.qIndex];
             if (idx === currentQ.answer) {
               const card = shuffle(CARD_POOL)[0];
@@ -213,7 +213,7 @@
           };
 
           const executeCardSkill = async (card, targetId) => {
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const roomRef = db.collection('rooms').doc(roomCode);
             let newHp = { ...roomData.hp };
             let log = '';
             if (card.type === 'target') {
@@ -232,7 +232,7 @@
           };
 
           const nextQuestion = async () => {
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(roomCode);
+            const roomRef = db.collection('rooms').doc(roomCode);
             if (roomData.qIndex + 1 < roomData.questions.length) {
               await roomRef.update({ qIndex: roomData.qIndex + 1, buzzerWinner: null, drawnCard: null, state: 'playing' });
             } else {
