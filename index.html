@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>五院大亂鬥 - citizengame0602</title>
+    <title>五院大亂鬥 v2 - citizengame0602</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -12,8 +12,10 @@
         body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         @keyframes bounceIn { 0% { transform: scale(0.3); opacity: 0; } 50% { transform: scale(1.05); opacity: 1; } 70% { transform: scale(0.9); } 100% { transform: scale(1); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse2 { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
         .animate-countdown { animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; }
         .animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-buzz-open { animation: pulse2 0.4s ease-out; }
         .yuan-bar { height: 100%; transition: width 0.8s ease-in-out; }
         @media (max-width: 640px) {
             .mobile-btn { padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 1.25rem; }
@@ -39,11 +41,57 @@
         };
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
+        // 使用 v2 collection 避免與 index.html 的資料衝突
         const db = firebase.firestore();
+
+        // ── 音效系統（Web Audio API，不需外部檔案）──────────────
+        const sound = (() => {
+          let ctx = null;
+          const get = () => {
+            if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (ctx.state === 'suspended') ctx.resume();
+            return ctx;
+          };
+          const play = (freq, type, dur, freqEnd) => {
+            try {
+              const c = get();
+              const osc = c.createOscillator();
+              const gain = c.createGain();
+              osc.connect(gain);
+              gain.connect(c.destination);
+              osc.type = type;
+              osc.frequency.setValueAtTime(freq, c.currentTime);
+              if (freqEnd) osc.frequency.linearRampToValueAtTime(freqEnd, c.currentTime + dur);
+              gain.gain.setValueAtTime(0.3, c.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+              osc.start(c.currentTime);
+              osc.stop(c.currentTime + dur);
+            } catch (e) {}
+          };
+          return {
+            // 倒數 tick（每秒一聲）
+            tick: () => play(660, 'sine', 0.12),
+            // 搶答開放（上揚音）
+            go: () => {
+              play(880, 'sine', 0.15);
+              setTimeout(() => play(1047, 'sine', 0.25), 100);
+            },
+            // 有人搶答
+            buzz: () => play(440, 'square', 0.12),
+            // 答對（三音上揚）
+            correct: () => {
+              play(523, 'sine', 0.2);
+              setTimeout(() => play(659, 'sine', 0.2), 150);
+              setTimeout(() => play(784, 'sine', 0.4), 300);
+            },
+            // 答錯（下降音）
+            wrong: () => play(280, 'sawtooth', 0.4, 160),
+          };
+        })();
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -78,6 +126,10 @@
 
         const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
 
+        // 搶答開放前的倒數秒數
+        const BUZZ_DELAY_NEW_Q = 3;  // 新題目
+        const BUZZ_DELAY_RETRY = 1;  // 答錯後換人搶答
+
         function App() {
           const [user, setUser] = useState(null);
           const [isConnecting, setIsConnecting] = useState(true);
@@ -87,6 +139,14 @@
           const [joinInput, setJoinInput] = useState('');
           const [errorMsg, setErrorMsg] = useState('');
           const [syncCountdown, setSyncCountdown] = useState(null);
+          // 本地計算的「距搶答開放剩餘秒數」
+          const [timeToOpen, setTimeToOpen] = useState(null);
+
+          // 追蹤上一個狀態，用於音效觸發
+          const prevBuzzerWinner = useRef(null);
+          const prevState = useRef(null);
+          const prevWrongLen = useRef(0);
+          const prevTimeToOpen = useRef(null);
 
           const showError = (msg) => setErrorMsg(msg);
 
@@ -106,6 +166,7 @@
             );
           };
 
+          // Firebase Auth
           useEffect(() => {
             auth.signInAnonymously().catch(() => showError("連線至伺服器失敗，請重新整理網頁。"));
             const unsubscribe = auth.onAuthStateChanged((u) => {
@@ -115,9 +176,10 @@
             return () => unsubscribe();
           }, []);
 
+          // 監聽房間資料
           useEffect(() => {
             if (!user || !roomCode) return;
-            const unsubscribe = db.collection('rooms').doc(roomCode).onSnapshot(
+            const unsubscribe = db.collection('rooms_v2').doc(roomCode).onSnapshot(
               (doc) => {
                 if (doc.exists) {
                   const data = doc.data();
@@ -130,8 +192,7 @@
                   }
                 } else {
                   showError("房間不存在或已由房主關閉！");
-                  setRoomCode('');
-                  setMyRole(null);
+                  setRoomCode(''); setMyRole(null);
                 }
               },
               () => showError("資料同步中斷，請確認網路連線！")
@@ -139,20 +200,67 @@
             return () => unsubscribe();
           }, [user, roomCode]);
 
+          // 同步倒數計時
           useEffect(() => {
             if (syncCountdown !== null && syncCountdown > 0) {
               const timer = setTimeout(() => setSyncCountdown(syncCountdown - 1), 1000);
               return () => clearTimeout(timer);
             } else if (syncCountdown === 0 && myRole === 'host') {
-              db.collection('rooms').doc(roomCode).update({ state: 'playing' });
+              db.collection('rooms_v2').doc(roomCode).update({
+                state: 'playing',
+                buzzerOpenAt: Date.now() + BUZZ_DELAY_NEW_Q * 1000,
+                wrongAnswerers: []
+              });
             }
           }, [syncCountdown]);
+
+          // 本地搶答倒數計時（從 buzzerOpenAt 計算）
+          useEffect(() => {
+            if (!roomData || roomData.state !== 'playing' || !roomData.buzzerOpenAt) {
+              setTimeToOpen(null);
+              return;
+            }
+            const update = () => {
+              const remaining = Math.ceil((roomData.buzzerOpenAt - Date.now()) / 1000);
+              setTimeToOpen(Math.max(0, remaining));
+            };
+            update();
+            const interval = setInterval(update, 200);
+            return () => clearInterval(interval);
+          }, [roomData?.buzzerOpenAt, roomData?.state]);
+
+          // 音效：根據狀態變化觸發
+          useEffect(() => {
+            if (!roomData) return;
+            // 有人搶答
+            if (roomData.buzzerWinner && roomData.buzzerWinner !== prevBuzzerWinner.current) sound.buzz();
+            prevBuzzerWinner.current = roomData.buzzerWinner;
+            // 答對（進入 gacha 狀態）
+            if (roomData.state === 'gacha' && prevState.current !== 'gacha') sound.correct();
+            prevState.current = roomData.state;
+            // 答錯（wrongAnswerers 增加）
+            const currWrongLen = (roomData.wrongAnswerers || []).length;
+            if (currWrongLen > prevWrongLen.current) sound.wrong();
+            prevWrongLen.current = currWrongLen;
+          }, [roomData]);
+
+          // 音效：搶答倒數 tick 和開放音
+          useEffect(() => {
+            if (timeToOpen === null) return;
+            if (timeToOpen > 0 && timeToOpen !== prevTimeToOpen.current) sound.tick();
+            if (timeToOpen === 0 && prevTimeToOpen.current !== null && prevTimeToOpen.current > 0) sound.go();
+            prevTimeToOpen.current = timeToOpen;
+          }, [timeToOpen]);
+
+          // ── 遊戲邏輯 ─────────────────────────────────────────
+
+          const roomRef = () => db.collection('rooms_v2').doc(roomCode);
 
           const createRoom = async () => {
             if (!user) { showError("尚未連線到伺服器，請稍候再試！"); return; }
             try {
               const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-              await db.collection('rooms').doc(code).set({
+              await db.collection('rooms_v2').doc(code).set({
                 state: 'lobby', hostUid: user.uid,
                 teams: {
                   group1: { id: 'group1', name: '第 1 組', joined: false, yuan: null },
@@ -164,6 +272,7 @@
                 hp: { group1: 100, group2: 100, group3: 100, group4: 100, group5: 100 },
                 questions: shuffle(QUESTION_BANK),
                 qIndex: 0, buzzerWinner: null, drawnCard: null,
+                buzzerOpenAt: 0, wrongAnswerers: [],
                 actionLog: ['🎯 遊戲房間已建立，等待各組加入...']
               });
               setRoomCode(code);
@@ -176,7 +285,7 @@
             if (!joinInput || joinInput.length !== 4) { showError("請輸入正確的 4 碼房間代碼！"); return; }
             try {
               const code = joinInput.toUpperCase();
-              const snap = await db.collection('rooms').doc(code).get();
+              const snap = await db.collection('rooms_v2').doc(code).get();
               if (snap.exists) setRoomCode(code);
               else showError(`找不到代碼為「${code}」的房間！\n請確認老師大螢幕上的代碼。`);
             } catch (e) { showError("加入房間失敗：" + e.message); }
@@ -186,7 +295,7 @@
             if (!roomData) return;
             if (roomData.teams[gid].joined) { showError("手腳太慢！此組別已被選走了。"); return; }
             try {
-              await db.collection('rooms').doc(roomCode).update({ [`teams.${gid}.joined`]: true, [`teams.${gid}.uid`]: user.uid });
+              await roomRef().update({ [`teams.${gid}.joined`]: true, [`teams.${gid}.uid`]: user.uid });
               setMyRole(gid);
             } catch (e) { showError("選擇組別時發生錯誤：" + e.message); }
           };
@@ -196,27 +305,56 @@
           const startSync = () => {
             const startTime = Date.now() + 5000;
             const shuffledYuans = shuffle(YUAN_DB);
-            const updates = { state: 'countdown', startTime, actionLog: ['🎲 命運輪盤啟動，5秒後正式開始！', ...roomData.actionLog].slice(0, 5) };
+            const updates = {
+              state: 'countdown', startTime,
+              actionLog: ['🎲 命運輪盤啟動，5秒後正式開始！', ...roomData.actionLog].slice(0, 5)
+            };
             Object.keys(roomData.teams).forEach((id, idx) => { updates[`teams.${id}.yuan`] = shuffledYuans[idx]; });
-            db.collection('rooms').doc(roomCode).update(updates);
+            roomRef().update(updates);
           };
 
           const handleBuzz = () => {
-            if (roomData.buzzerWinner || roomData.hp[myRole] <= 0) return;
-            db.collection('rooms').doc(roomCode).update({ buzzerWinner: myRole });
+            if (roomData.buzzerWinner) return;
+            if (roomData.hp[myRole] <= 0) return;
+            if ((roomData.wrongAnswerers || []).includes(myRole)) return;
+            if (Date.now() < roomData.buzzerOpenAt) return;
+            roomRef().update({ buzzerWinner: myRole });
           };
 
           const handleAnswer = (idx) => {
             const isCorrect = idx === roomData.questions[roomData.qIndex].answer;
             const myYuan = roomData.teams[myRole].yuan.name;
-            const roomRef = db.collection('rooms').doc(roomCode);
+
             if (isCorrect) {
               const card = shuffle(CARD_POOL)[0];
-              roomRef.update({ state: 'gacha', drawnCard: card, actionLog: [`✨ ${myYuan} 答對了！抽出了 ${card.name}！`, ...roomData.actionLog].slice(0, 5) });
+              roomRef().update({
+                state: 'gacha', drawnCard: card,
+                actionLog: [`✨ ${myYuan} 答對了！抽出了 ${card.name}！`, ...roomData.actionLog].slice(0, 5)
+              });
               if (card.type !== 'target') setTimeout(() => executeSkill(card, null), 2000);
             } else {
-              roomRef.update({ [`hp.${myRole}`]: Math.max(0, roomData.hp[myRole] - 15), buzzerWinner: null, actionLog: [`❌ ${myYuan} 答錯了！受到知識反噬 (-15 HP)`, ...roomData.actionLog].slice(0, 5) });
-              setTimeout(() => nextQ(), 2000);
+              // 計算答錯後的狀態
+              const newHp = { ...roomData.hp, [myRole]: Math.max(0, roomData.hp[myRole] - 15) };
+              const newWrong = [...(roomData.wrongAnswerers || []), myRole];
+              // 存活且尚未答題的組
+              const remaining = Object.keys(newHp).filter(k => newHp[k] > 0 && !newWrong.includes(k));
+
+              if (remaining.length === 0) {
+                // 所有存活組都答錯，跳題
+                roomRef().update({
+                  hp: newHp, buzzerWinner: null, wrongAnswerers: [],
+                  actionLog: [`❌ ${myYuan} 答錯！全員作答完畢，跳過本題`, ...roomData.actionLog].slice(0, 5)
+                });
+                setTimeout(() => nextQ(), 1500);
+              } else {
+                // 還有其他組可以搶答
+                roomRef().update({
+                  hp: newHp, buzzerWinner: null,
+                  wrongAnswerers: newWrong,
+                  buzzerOpenAt: Date.now() + BUZZ_DELAY_RETRY * 1000,
+                  actionLog: [`❌ ${myYuan} 答錯！換人搶答 (-15 HP)`, ...roomData.actionLog].slice(0, 5)
+                });
+              }
             }
           };
 
@@ -241,26 +379,60 @@
               hp[myRole] = Math.min(150, hp[myRole] + card.heal);
               log = `🛡️ 庇護降臨！${roomData.teams[myRole].yuan.name} 回復了 ${card.heal} HP`;
             }
-            db.collection('rooms').doc(roomCode).update({ hp, actionLog: [log, ...roomData.actionLog].slice(0, 5) });
+            roomRef().update({ hp, actionLog: [log, ...roomData.actionLog].slice(0, 5) });
             setTimeout(() => nextQ(), 2000);
           };
 
           const nextQ = () => {
             const updates = roomData.qIndex + 1 < roomData.questions.length
-              ? { qIndex: roomData.qIndex + 1, buzzerWinner: null, drawnCard: null, state: 'playing' }
+              ? {
+                  qIndex: roomData.qIndex + 1,
+                  buzzerWinner: null, drawnCard: null, state: 'playing',
+                  buzzerOpenAt: Date.now() + BUZZ_DELAY_NEW_Q * 1000,
+                  wrongAnswerers: []
+                }
               : { state: 'end' };
-            db.collection('rooms').doc(roomCode).update(updates);
+            roomRef().update(updates);
           };
 
           const resetGame = () => {
             if (myRole !== 'host') return;
-            db.collection('rooms').doc(roomCode).update({
+            roomRef().update({
               state: 'lobby',
               hp: { group1: 100, group2: 100, group3: 100, group4: 100, group5: 100 },
               questions: shuffle(QUESTION_BANK),
               qIndex: 0, buzzerWinner: null, drawnCard: null,
+              buzzerOpenAt: 0, wrongAnswerers: [],
               actionLog: ['🔄 房主已重置遊戲，等待重新分配身分...']
             });
+          };
+
+          // ── 搶答區域渲染 ──────────────────────────────────────
+          const renderBuzzerArea = (team) => {
+            const myHp = roomData.hp[myRole];
+            const alreadyWrong = (roomData.wrongAnswerers || []).includes(myRole);
+
+            if (myHp <= 0) return (
+              <div className="mt-4 py-6 rounded-3xl font-black text-2xl bg-slate-700 text-slate-500 text-center">已陣亡</div>
+            );
+            if (alreadyWrong) return (
+              <div className="mt-4 py-6 rounded-3xl font-black text-xl bg-slate-800 border-2 border-slate-600 text-slate-400 text-center">
+                已答題，等待其他組搶答
+              </div>
+            );
+            if (timeToOpen > 0) return (
+              <div className="mt-4 py-4 rounded-3xl bg-slate-700 text-center">
+                <p className="text-slate-400 text-sm font-bold mb-1">搶答倒數</p>
+                <p className="text-6xl font-black text-white animate-bounce">{timeToOpen}</p>
+              </div>
+            );
+            // 搶答開放
+            return (
+              <button onClick={handleBuzz}
+                className={`mt-4 py-8 rounded-3xl font-black text-4xl shadow-2xl active:scale-95 transition-all w-full animate-buzz-open ${team.yuan?.color}`}>
+                搶答！
+              </button>
+            );
           };
 
           // ── 畫面分支 ──────────────────────────────────────────
@@ -271,7 +443,7 @@
             <div className="h-screen flex flex-col items-center justify-center p-6 space-y-6">
               <ErrorModal />
               <h1 className="text-4xl font-black">五院大亂鬥</h1>
-              <p className="text-slate-500 font-mono text-[10px]">Build: 2026-05-17 (Merged)</p>
+              <p className="text-slate-500 font-mono text-[10px]">v2 — 倒數搶答・音效・換人機制</p>
               <div className="w-full max-w-sm bg-slate-800 p-6 rounded-3xl border-2 border-slate-700 shadow-xl space-y-4">
                 <button onClick={createRoom} className="w-full bg-emerald-500 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">建立房間 (老師)</button>
                 <div className="h-px bg-slate-700"></div>
@@ -354,56 +526,74 @@
           // 遊戲主畫面 (playing / gacha)
           const q = roomData.questions[roomData.qIndex];
           const team = myRole === 'host' ? null : roomData.teams[myRole];
+          const buzzIsOpen = timeToOpen === 0;
 
           return (
             <div className="h-screen flex flex-col font-sans overflow-hidden bg-slate-900">
               <ErrorModal />
               <header className="p-3 bg-slate-800 flex justify-between items-center border-b border-slate-700 shadow-md">
-                <span className="font-bold text-sm">房 {roomCode}</span>
-                <span className="bg-slate-700 px-3 py-1 rounded-full text-xs">第 {roomData.qIndex + 1} 題</span>
+                <span className="font-bold text-sm">房 {roomCode} · v2</span>
+                <div className="flex items-center gap-2">
+                  {/* 搶答倒數 badge（主機也能看到） */}
+                  {roomData.state === 'playing' && !roomData.buzzerWinner && timeToOpen > 0 && (
+                    <span className="bg-amber-500 text-black px-2 py-0.5 rounded-full text-xs font-black">{timeToOpen}s</span>
+                  )}
+                  {roomData.state === 'playing' && !roomData.buzzerWinner && timeToOpen === 0 && (
+                    <span className="bg-emerald-500 text-white px-2 py-0.5 rounded-full text-xs font-black animate-pulse">搶答中</span>
+                  )}
+                  <span className="bg-slate-700 px-3 py-1 rounded-full text-xs">第 {roomData.qIndex + 1} 題</span>
+                </div>
               </header>
               <main className="flex-1 flex flex-col p-3 gap-3 overflow-hidden">
+                {/* HP 看板 */}
                 <div className="grid grid-cols-5 gap-1.5 h-16 sm:h-20 shrink-0">
                   {Object.values(roomData.teams).map(t => {
                     const hp = roomData.hp[t.id];
                     const buzz = roomData.buzzerWinner === t.id;
+                    const wronged = (roomData.wrongAnswerers || []).includes(t.id);
                     return (
-                      <div key={t.id} className={`relative rounded-xl border-2 transition-all flex flex-col justify-center items-center overflow-hidden ${buzz ? 'border-yellow-400 bg-white z-10' : 'bg-slate-800 border-slate-700'} ${hp <= 0 ? 'opacity-30 grayscale' : ''}`}>
+                      <div key={t.id} className={`relative rounded-xl border-2 transition-all flex flex-col justify-center items-center overflow-hidden
+                        ${buzz ? 'border-yellow-400 bg-white z-10' : wronged ? 'border-rose-800 bg-slate-800' : 'bg-slate-800 border-slate-700'}
+                        ${hp <= 0 ? 'opacity-30 grayscale' : ''}`}>
                         <div className="absolute inset-0 opacity-20 pointer-events-none">
                           <div className={`yuan-bar ${t.yuan?.color}`} style={{ width: `${Math.min(100, (hp / 150) * 100)}%` }}></div>
                         </div>
                         <p className="text-[8px] font-bold text-slate-500">{t.name}</p>
                         <p className={`text-[10px] sm:text-sm font-black ${buzz ? t.yuan?.text : 'text-white'}`}>{t.yuan?.name}</p>
                         <p className={`text-[10px] font-black ${buzz ? 'text-black' : 'text-slate-300'}`}>{hp} HP</p>
+                        {wronged && hp > 0 && <p className="text-[8px] text-rose-400 font-bold">已答</p>}
                       </div>
                     );
                   })}
                 </div>
+
+                {/* 題目區 */}
                 <div className="flex-1 flex flex-col gap-3 relative min-h-0">
-                  <div className={`flex-1 bg-slate-800 p-5 rounded-2xl border-4 flex flex-col justify-center ${roomData.buzzerWinner ? 'border-yellow-400' : 'border-slate-700'}`}>
+                  <div className={`flex-1 bg-slate-800 p-5 rounded-2xl border-4 flex flex-col justify-center
+                    ${roomData.buzzerWinner ? 'border-yellow-400' : buzzIsOpen && roomData.state === 'playing' ? 'border-emerald-600' : 'border-slate-700'}`}>
                     <h2 className="text-xl sm:text-2xl font-black mb-6 mobile-q-text">{q.text}</h2>
                     <div className="flex-1 flex flex-col gap-3 justify-center">
                       {q.options.map((o, i) => (
                         <button key={i} onClick={() => handleAnswer(i)} disabled={myRole !== roomData.buzzerWinner}
-                          className={`p-4 sm:p-5 rounded-xl border-2 text-left text-lg font-bold mobile-btn transition ${myRole === roomData.buzzerWinner ? 'bg-slate-100 text-black border-white active:scale-95' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
+                          className={`p-4 sm:p-5 rounded-xl border-2 text-left text-lg font-bold mobile-btn transition
+                            ${myRole === roomData.buzzerWinner ? 'bg-slate-100 text-black border-white active:scale-95' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
                           <span className="inline-block w-7 h-7 rounded-full bg-black/10 text-center leading-7 mr-3 text-sm font-black shrink-0">{['A', 'B', 'C'][i]}</span>
                           {o}
                         </button>
                       ))}
                     </div>
-                    {myRole !== 'host' && roomData.state === 'playing' && !roomData.buzzerWinner && (
-                      <button onClick={handleBuzz} disabled={roomData.hp[myRole] <= 0}
-                        className={`mt-4 py-8 rounded-3xl font-black text-4xl shadow-2xl active:scale-95 transition-all ${roomData.hp[myRole] <= 0 ? 'bg-slate-600 cursor-not-allowed' : team.yuan?.color}`}>
-                        {roomData.hp[myRole] <= 0 ? '已陣亡' : '搶答！'}
-                      </button>
-                    )}
+                    {/* 搶答區域 */}
+                    {myRole !== 'host' && roomData.state === 'playing' && !roomData.buzzerWinner && renderBuzzerArea(team)}
                   </div>
                 </div>
+
+                {/* 戰況 log */}
                 <div className="h-20 bg-black/60 p-3 rounded-xl border-2 border-slate-700 font-mono text-[10px] overflow-hidden flex flex-col-reverse shrink-0">
                   {roomData.actionLog.map((l, i) => <div key={i} className={i === 0 ? 'text-white font-bold' : 'text-slate-500'}>{l}</div>)}
                 </div>
               </main>
 
+              {/* Gacha 疊加層 */}
               {roomData.state === 'gacha' && (
                 <div className="fixed inset-0 bg-slate-900/95 z-50 flex items-center justify-center p-6 animate-fade-in">
                   <div className="bg-slate-800 border-4 border-yellow-400 p-8 rounded-3xl text-center shadow-2xl max-w-xs w-full">
@@ -416,7 +606,8 @@
                           {Object.values(roomData.teams)
                             .filter(t => t.id !== myRole && roomData.hp[t.id] > 0)
                             .map(t => (
-                              <button key={t.id} onClick={() => executeSkill(roomData.drawnCard, t.id)} className={`p-3 rounded-xl text-white font-black text-sm active:scale-95 transition ${t.yuan?.color}`}>
+                              <button key={t.id} onClick={() => executeSkill(roomData.drawnCard, t.id)}
+                                className={`p-3 rounded-xl text-white font-black text-sm active:scale-95 transition ${t.yuan?.color}`}>
                                 {t.yuan?.name}
                               </button>
                             ))}
