@@ -123,33 +123,50 @@
           }, [user, roomCode]);
 
           const createRoom = async () => {
-            const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(code);
-            const initialData = {
-              state: 'lobby', hostUid: user.uid,
-              teams: {
-                group1: { id: 'group1', name: '第 1 組', joined: false, yuan: null },
-                group2: { id: 'group2', name: '第 2 組', joined: false, yuan: null },
-                group3: { id: 'group3', name: '第 3 組', joined: false, yuan: null },
-                group4: { id: 'group4', name: '第 4 組', joined: false, yuan: null },
-                group5: { id: 'group5', name: '第 5 組', joined: false, yuan: null }
-              },
-              hp: { group1: INITIAL_HP, group2: INITIAL_HP, group3: INITIAL_HP, group4: INITIAL_HP, group5: INITIAL_HP },
-              questions: shuffle(QUESTION_BANK),
-              qIndex: 0, buzzerWinner: null, drawnCard: null,
-              actionLog: ['🎯 遊戲房間已建立']
-            };
-            await roomRef.set(initialData);
-            setRoomCode(code);
-            setMyRole('host');
+            try {
+              if (!user) {
+                showError("尚未登入 Firebase，請確認已啟用匿名登入！");
+                return;
+              }
+              const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+              const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(code);
+              const initialData = {
+                state: 'lobby', hostUid: user.uid,
+                teams: {
+                  group1: { id: 'group1', name: '第 1 組', joined: false, yuan: null },
+                  group2: { id: 'group2', name: '第 2 組', joined: false, yuan: null },
+                  group3: { id: 'group3', name: '第 3 組', joined: false, yuan: null },
+                  group4: { id: 'group4', name: '第 4 組', joined: false, yuan: null },
+                  group5: { id: 'group5', name: '第 5 組', joined: false, yuan: null }
+                },
+                hp: { group1: INITIAL_HP, group2: INITIAL_HP, group3: INITIAL_HP, group4: INITIAL_HP, group5: INITIAL_HP },
+                questions: shuffle(QUESTION_BANK),
+                qIndex: 0, buzzerWinner: null, drawnCard: null,
+                actionLog: ['🎯 遊戲房間已建立']
+              };
+              await roomRef.set(initialData);
+              setRoomCode(code);
+              setMyRole('host');
+            } catch (e) {
+              console.error(e);
+              showError("建立房間失敗：" + e.message + "\n請檢查 Firestore Rules 權限設定。");
+            }
           };
 
           const joinRoom = async () => {
-            const code = joinInput.toUpperCase();
-            const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(code);
-            const snap = await roomRef.get();
-            if (snap.exists) setRoomCode(code);
-            else showError("找不到房間！");
+            try {
+              if (!joinInput || joinInput.length !== 4) {
+                showError("請輸入 4 碼代碼");
+                return;
+              }
+              const code = joinInput.toUpperCase();
+              const roomRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('rooms').doc(code);
+              const snap = await roomRef.get();
+              if (snap.exists) setRoomCode(code);
+              else showError("找不到房間！");
+            } catch (e) {
+              showError("加入失敗：" + e.message);
+            }
           };
 
           const selectGroup = async (groupId) => {
