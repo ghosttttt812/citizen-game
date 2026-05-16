@@ -6,39 +6,56 @@
     <title>五院大亂鬥 - citizengame0602</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React & Babel for Browser Rendering -->
+    <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Lucide Icons -->
+    <!-- Lucide Icons (Browser Version) -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    
     <style>
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        /* 避免圖標沒讀取到時版面亂掉 */
+        .icon-placeholder { display: inline-block; width: 24px; height: 24px; background: rgba(255,255,255,0.1); border-radius: 4px; }
     </style>
+    
+    <script>
+        // 全域錯誤捕捉，方便回報問題
+        window.onerror = function(msg, url, line) {
+            alert("網頁執行出錯：" + msg + "\n行號：" + line);
+        };
+    </script>
 </head>
 <body class="bg-slate-900">
     <div id="root"></div>
 
-    <!-- Firebase SDKs (Compat version for easier browser script usage) -->
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
-        
-        // Lucide Icons Mapping
-        const { 
-            Swords: LucideSwords, 
-            Zap: LucideZap, 
-            Crosshair: LucideCrosshair, 
-            Skull: LucideSkull, 
-            Users: LucideUsers, 
-            LogOut: LucideLogOut, 
-            Play: LucidePlay, 
-            AlertCircle: LucideAlertCircle 
-        } = window.lucide;
+        const { useState, useEffect, useMemo } = React;
+
+        // --- 安全的圖標組件映射 ---
+        const Icon = ({ name, className, size = 24 }) => {
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
+
+        const LucideSwords = () => <Icon name="swords" />;
+        const LucideZap = () => <Icon name="zap" />;
+        const LucideCrosshair = () => <Icon name="crosshair" />;
+        const LucideSkull = ({ className }) => <Icon name="skull" className={className} />;
+        const LucideUsers = () => <Icon name="users" />;
+        const LucideLogOut = () => <Icon name="log-out" />;
+        const LucidePlay = () => <Icon name="play" />;
+        const LucideAlertCircle = ({ className }) => <Icon name="alert-circle" className={className} />;
 
         // --- Firebase 初始化 ---
         const firebaseConfig = {
@@ -51,14 +68,14 @@
           measurementId: "G-FZLKK4YZ43"
         };
         
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const appId = 'citizengame0602';
 
         // --- 遊戲資料庫 ---
         const INITIAL_HP = 100;
-
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
           { id: 'legislative', name: '立法院', color: 'bg-emerald-500', text: 'text-emerald-500' },
@@ -109,7 +126,7 @@
                 await auth.signInAnonymously();
               } catch (error) {
                 console.error("Auth error:", error);
-                showError("連線至伺服器失敗，請檢查 Firebase 匿名登入是否開啟。");
+                showError("Firebase 匿名登入失敗，請確認已啟用 Anonymous Auth。");
               } finally {
                 setIsConnecting(false);
               }
@@ -126,19 +143,18 @@
               if (docSnap.exists) {
                 setRoomData(docSnap.data());
               } else {
-                showError("房間不存在或已由房主關閉！");
+                showError("房間不存在或已關閉！");
                 setRoomCode('');
                 setMyRole(null);
               }
             }, (error) => {
-              console.error("Snapshot error:", error);
-              showError("資料同步中斷：" + error.message);
+              showError("同步失敗：" + error.message);
             });
             return () => unsubscribe();
           }, [user, roomCode]);
 
           const createRoom = async () => {
-            if (!user) { showError("尚未登入，請稍候！"); return; }
+            if (!user) return;
             try {
               const code = Math.random().toString(36).substring(2, 6).toUpperCase();
               const roomRef = db.collection('rooms').doc(code);
@@ -154,156 +170,96 @@
                 hp: { group1: INITIAL_HP, group2: INITIAL_HP, group3: INITIAL_HP, group4: INITIAL_HP, group5: INITIAL_HP },
                 questions: shuffle(QUESTION_BANK),
                 qIndex: 0, buzzerWinner: null, drawnCard: null,
-                actionLog: ['🎯 遊戲房間已建立，等待各組加入...']
+                actionLog: ['🎯 遊戲房間已建立']
               };
               await roomRef.set(initialData);
               setRoomCode(code);
               setMyRole('host');
-            } catch (e) {
-              showError("建立失敗：" + e.message);
-            }
+            } catch (e) { showError("建立失敗：" + e.message); }
           };
 
           const joinRoom = async () => {
-            if (!user) { showError("連線中..."); return; }
-            if (!joinInput || joinInput.length !== 4) { showError("請輸入 4 碼代碼"); return; }
+            if (!joinInput) return;
             try {
               const code = joinInput.toUpperCase();
               const roomRef = db.collection('rooms').doc(code);
               const snap = await roomRef.get();
               if (snap.exists) setRoomCode(code);
-              else showError(`找不到房間「${code}」`);
-            } catch (e) {
-              showError("加入失敗：" + e.message);
-            }
+              else showError("找不到房間");
+            } catch (e) { showError("加入失敗：" + e.message); }
           };
 
           const selectGroup = async (groupId) => {
             try {
-              const roomRef = db.collection('rooms').doc(roomCode);
-              await roomRef.update({
+              await db.collection('rooms').doc(roomCode).update({
                 [`teams.${groupId}.joined`]: true,
                 [`teams.${groupId}.uid`]: user.uid
               });
               setMyRole(groupId);
-            } catch (e) {
-              showError("選擇組別失敗：" + e.message);
-            }
+            } catch (e) { showError("選組失敗：" + e.message); }
           };
 
           const startGame = async () => {
-            if (myRole !== 'host' || !roomData) return;
             try {
               const shuffledYuans = shuffle(YUAN_DB);
-              const roomRef = db.collection('rooms').doc(roomCode);
-              const updates = { 
-                state: 'playing', 
-                actionLog: ['🎲 遊戲開始，隨機分配身分！', ...roomData.actionLog].slice(0, 5) 
-              };
-              Object.keys(roomData.teams).forEach((id, idx) => {
-                updates[`teams.${id}.yuan`] = shuffledYuans[idx];
-              });
-              await roomRef.update(updates);
-            } catch (e) {
-              showError("開始遊戲失敗：" + e.message);
-            }
+              const updates = { state: 'playing', actionLog: ['🎲 遊戲開始！', ...roomData.actionLog].slice(0, 5) };
+              Object.keys(roomData.teams).forEach((id, idx) => { updates[`teams.${id}.yuan`] = shuffledYuans[idx]; });
+              await db.collection('rooms').doc(roomCode).update(updates);
+            } catch (e) { showError("啟動失敗：" + e.message); }
           };
 
           const handleBuzz = async () => {
-            if (!myRole.startsWith('group') || roomData.state !== 'playing' || roomData.buzzerWinner) return;
-            if (roomData.hp[myRole] <= 0) return; 
-            try {
-              const roomRef = db.collection('rooms').doc(roomCode);
-              await roomRef.update({ buzzerWinner: myRole });
-            } catch (e) {}
+            if (roomData.buzzerWinner) return;
+            try { await db.collection('rooms').doc(roomCode).update({ buzzerWinner: myRole }); } catch (e) {}
           };
 
-          const handleAnswer = async (optionIdx) => {
-            if (myRole !== roomData.buzzerWinner || roomData.state !== 'playing') return;
+          const handleAnswer = async (idx) => {
+            const currentQ = roomData.questions[roomData.qIndex];
             try {
-              const roomRef = db.collection('rooms').doc(roomCode);
-              const currentQ = roomData.questions[roomData.qIndex];
-              const myTeam = roomData.teams[myRole];
-              if (optionIdx === currentQ.answer) {
+              if (idx === currentQ.answer) {
                 const card = shuffle(CARD_POOL)[0];
-                await roomRef.update({
+                await db.collection('rooms').doc(roomCode).update({
                   state: 'gacha', drawnCard: card,
-                  actionLog: [`✨ ${myTeam.yuan.name} 答對了！抽出了 ${card.name}！`, ...roomData.actionLog].slice(0, 5)
+                  actionLog: [`✨ ${roomData.teams[myRole].yuan.name} 答對了！`, ...roomData.actionLog].slice(0, 5)
                 });
                 if (card.type !== 'target') setTimeout(() => executeCardSkill(card, null), 2000);
               } else {
-                await roomRef.update({
+                await db.collection('rooms').doc(roomCode).update({
                   [`hp.${myRole}`]: Math.max(0, roomData.hp[myRole] - 15),
-                  actionLog: [`❌ ${myTeam.yuan.name} 答錯了！受傷 -15 HP`, ...roomData.actionLog].slice(0, 5),
-                  buzzerWinner: null 
+                  buzzerWinner: null,
+                  actionLog: [`❌ ${roomData.teams[myRole].yuan.name} 答錯了！`, ...roomData.actionLog].slice(0, 5)
                 });
                 setTimeout(() => nextQuestion(), 2000);
               }
-            } catch (e) {
-              showError("作答失敗：" + e.message);
-            }
+            } catch (e) {}
           };
 
           const executeCardSkill = async (card, targetId) => {
+            let newHp = { ...roomData.hp };
+            let log = '';
+            if (card.type === 'target') {
+              newHp[targetId] = Math.max(0, newHp[targetId] - card.dmg);
+              if (card.heal > 0) newHp[roomData.buzzerWinner] = Math.min(150, newHp[roomData.buzzerWinner] + card.heal);
+              log = `💥 攻擊了 ${roomData.teams[targetId].yuan.name}`;
+            } else if (card.type === 'aoe') {
+              Object.keys(newHp).forEach(k => { if (k !== roomData.buzzerWinner) newHp[k] = Math.max(0, newHp[k] - card.dmg); });
+              log = `🌋 全場範圍攻擊！`;
+            } else if (card.type === 'self') {
+              newHp[roomData.buzzerWinner] = Math.min(150, newHp[roomData.buzzerWinner] + card.heal);
+              log = `🛡️ 獲得治癒！`;
+            }
             try {
-              const roomRef = db.collection('rooms').doc(roomCode);
-              const attacker = roomData.teams[roomData.buzzerWinner];
-              let newHp = { ...roomData.hp };
-              let logMsg = '';
-              switch(card.type) {
-                case 'target':
-                  newHp[targetId] = Math.max(0, newHp[targetId] - card.dmg);
-                  if(card.heal > 0) newHp[roomData.buzzerWinner] = Math.min(150, newHp[roomData.buzzerWinner] + card.heal);
-                  logMsg = `💥 攻擊了 ${roomData.teams[targetId].yuan.name}`;
-                  break;
-                case 'aoe':
-                  Object.keys(newHp).forEach(key => {
-                    if (key !== roomData.buzzerWinner) newHp[key] = Math.max(0, newHp[key] - card.dmg);
-                  });
-                  logMsg = `🌋 全場範圍攻擊！`;
-                  break;
-                case 'auto-highest':
-                  let highest = null; let maxVal = -1;
-                  Object.keys(newHp).forEach(key => {
-                    if (newHp[key] > maxVal && key !== roomData.buzzerWinner) { maxVal = newHp[key]; highest = key; }
-                  });
-                  if(highest) {
-                    newHp[highest] = Math.max(0, newHp[highest] - card.dmg);
-                    logMsg = `👁️ 制裁霸主 ${roomData.teams[highest].yuan.name}`;
-                  }
-                  break;
-                case 'self':
-                  newHp[roomData.buzzerWinner] = Math.min(150, newHp[roomData.buzzerWinner] + card.heal);
-                  logMsg = `🛡️ 獲得治癒！`;
-                  break;
-              }
-              await roomRef.update({ hp: newHp, actionLog: [logMsg, ...roomData.actionLog].slice(0, 5) });
+              await db.collection('rooms').doc(roomCode).update({ hp: newHp, actionLog: [log, ...roomData.actionLog].slice(0, 5) });
               setTimeout(() => nextQuestion(), 3000);
             } catch (e) {}
           };
 
           const nextQuestion = async () => {
-            try {
-              const roomRef = db.collection('rooms').doc(roomCode);
-              if (roomData.qIndex + 1 < roomData.questions.length) {
-                await roomRef.update({ qIndex: roomData.qIndex + 1, buzzerWinner: null, drawnCard: null, state: 'playing' });
-              } else {
-                await roomRef.update({ state: 'end' });
-              }
-            } catch (e) {}
-          };
-
-          const resetGame = async () => {
-            try {
-              const roomRef = db.collection('rooms').doc(roomCode);
-              await roomRef.update({
-                state: 'lobby',
-                hp: { group1: INITIAL_HP, group2: INITIAL_HP, group3: INITIAL_HP, group4: INITIAL_HP, group5: INITIAL_HP },
-                questions: shuffle(QUESTION_BANK),
-                qIndex: 0, buzzerWinner: null, drawnCard: null,
-                actionLog: ['🔄 遊戲已重置']
-              });
-            } catch (e) {}
+            if (roomData.qIndex + 1 < roomData.questions.length) {
+              await db.collection('rooms').doc(roomCode).update({ qIndex: roomData.qIndex + 1, buzzerWinner: null, drawnCard: null, state: 'playing' });
+            } else {
+              await db.collection('rooms').doc(roomCode).update({ state: 'end' });
+            }
           };
 
           const ErrorModal = () => {
@@ -311,183 +267,113 @@
             return (
               <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
                 <div className="bg-slate-800 border-4 border-rose-500 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl">
-                  <LucideAlertCircle className="text-rose-500 w-16 h-16 mx-auto mb-4 animate-bounce" />
+                  <LucideAlertCircle className="text-rose-500 w-16 h-16 mx-auto mb-4" />
                   <h3 className="text-2xl font-black text-white mb-3">系統提示</h3>
-                  <p className="text-slate-300 font-medium mb-8 whitespace-pre-wrap">{errorMsg}</p>
-                  <button onClick={() => setErrorMsg('')} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-black text-lg py-4 rounded-xl transition active:scale-95">我知道了</button>
+                  <p className="text-slate-300 mb-8">{errorMsg}</p>
+                  <button onClick={() => setErrorMsg('')} className="w-full bg-rose-500 p-4 rounded-xl text-white font-bold">我知道了</button>
                 </div>
               </div>
             );
           };
 
-          if (isConnecting) return <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4"><LucideZap className="text-yellow-400 w-16 h-16 animate-pulse mb-4" /><h2 className="text-2xl font-bold">系統連線中...</h2><ErrorModal /></div>;
+          if (isConnecting) return <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white"><LucideZap /><h2 className="text-2xl mt-4">連線中...</h2></div>;
 
-          if (!roomCode) {
-            return (
-              <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6">
-                <ErrorModal />
-                <LucideSwords className="text-yellow-400 w-24 h-24 mb-6 animate-pulse" />
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl md:text-5xl font-black text-white leading-tight">五院大亂鬥<br/><span className="text-2xl text-amber-500">連線對戰版</span></h1>
-                    <div className="text-slate-500 text-xs mt-2 font-mono">Build: 2026-05-16-1630 (Polished UI)</div>
+          if (!roomCode) return (
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
+              <LucideSwords />
+              <h1 className="text-4xl md:text-5xl font-black text-white mt-6">五院大亂鬥<br/><span className="text-xl text-amber-500 font-normal">連線對戰版</span></h1>
+              <div className="text-slate-600 text-[10px] font-mono mt-2">Build: 2026-05-16-1645 (Stable Script)</div>
+              <div className="flex flex-col md:flex-row gap-6 mt-10 w-full max-w-3xl">
+                <div className="flex-1 bg-slate-800 p-8 rounded-3xl border-2 border-slate-700 shadow-xl">
+                  <LucidePlay /><h2 className="text-white text-xl font-bold mt-4">老師端</h2>
+                  <button onClick={createRoom} className="w-full bg-emerald-500 p-4 rounded-xl text-white font-black mt-6">建立新房間</button>
                 </div>
-                <div className="flex flex-col md:flex-row gap-6 w-full max-w-3xl">
-                  <div className="flex-1 bg-slate-800 p-8 rounded-3xl border-2 border-slate-700 flex flex-col items-center shadow-xl">
-                    <LucidePlay className="text-emerald-400 w-12 h-12 mb-4" />
-                    <h2 className="text-2xl font-bold text-white mb-2">老師 / 房主</h2>
-                    <button onClick={createRoom} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xl py-4 rounded-xl transition active:scale-95 shadow-lg mt-4">建立新房間</button>
-                  </div>
-                  <div className="flex-1 bg-slate-800 p-8 rounded-3xl border-2 border-slate-700 flex flex-col items-center shadow-xl">
-                    <LucideUsers className="text-blue-400 w-12 h-12 mb-4" />
-                    <h2 className="text-2xl font-bold text-white mb-2">學生 / 玩家</h2>
-                    <input type="text" value={joinInput} onChange={(e)=>setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="4 碼代碼" className="w-full bg-slate-900 text-white text-center text-2xl font-black py-4 rounded-xl border-2 border-slate-600 focus:border-blue-500 outline-none mb-4 uppercase transition-all mt-4" />
-                    <button onClick={joinRoom} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black text-xl py-4 rounded-xl transition active:scale-95 shadow-lg">加入遊戲</button>
-                  </div>
+                <div className="flex-1 bg-slate-800 p-8 rounded-3xl border-2 border-slate-700 shadow-xl">
+                  <LucideUsers /><h2 className="text-white text-xl font-bold mt-4">學生端</h2>
+                  <input type="text" value={joinInput} onChange={e=>setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="輸入代碼" className="w-full bg-slate-900 text-white text-center p-4 rounded-xl mt-6 border-2 border-slate-600 focus:border-blue-500 outline-none" />
+                  <button onClick={joinRoom} className="w-full bg-blue-500 p-4 rounded-xl text-white font-black mt-4">加入遊戲</button>
                 </div>
               </div>
-            );
-          }
+              <ErrorModal />
+            </div>
+          );
 
-          if (!roomData) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center font-bold text-2xl animate-pulse text-center p-10">正在讀取房間資料...<br/>(請確認資料庫規則已發佈)</div>;
+          if (!roomData) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center animate-pulse">讀取中...</div>;
 
-          if (roomData.state === 'lobby') {
-            return (
-              <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 relative">
-                <ErrorModal />
-                <button onClick={()=>setRoomCode('')} className="absolute top-6 right-6 text-slate-400 hover:text-white flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-full transition"><LucideLogOut size={18}/> 離開</button>
-                <div className="bg-slate-800 p-6 md:p-12 rounded-3xl border-4 border-yellow-500 shadow-2xl text-center max-w-2xl w-full">
-                  <h2 className="text-2xl text-slate-400 font-bold mb-3">房間代碼：</h2>
-                  <h1 className="text-7xl md:text-9xl font-black text-white tracking-widest mb-10 drop-shadow-lg">{roomCode}</h1>
-                  {myRole === 'host' ? (
-                    <div className="animate-fade-in">
-                      <p className="text-yellow-400 mb-6 font-bold text-lg">各組連線狀態</p>
-                      <div className="flex flex-wrap justify-center gap-4 mb-10">
-                        {Object.values(roomData.teams).map(t => (
-                          <span key={t.id} className={`px-5 py-3 rounded-full font-black text-sm border-2 ${t.joined ? 'bg-emerald-500 border-emerald-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500'}`}>
-                            {t.name} {t.joined ? '✓' : '...'}
-                          </span>
-                        ))}
-                      </div>
-                      <button onClick={startGame} className="w-full md:w-auto bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-slate-900 text-2xl font-black py-4 px-16 rounded-full shadow-xl transition active:scale-95">開始遊戲</button>
-                    </div>
-                  ) : (
-                    <div className="animate-fade-in">
-                      {!myRole ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                          {Object.values(roomData.teams).map(t => (
-                            <button key={t.id} onClick={() => selectGroup(t.id)} disabled={t.joined} className={`py-5 rounded-2xl font-black text-xl transition-all ${t.joined ? 'bg-slate-700 text-slate-500 opacity-50' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg active:translate-y-1'}`}>{t.name}</button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="py-10 text-3xl font-black text-emerald-400 animate-pulse flex items-center justify-center gap-3"><LucideZap /> 成功加入 {roomData.teams[myRole].name}！</div>
-                      )}
-                    </div>
-                  )}
-                </div>
+          if (roomData.state === 'lobby') return (
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 relative">
+              <div className="bg-slate-800 p-10 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-2xl">
+                <h2 className="text-slate-400 font-bold mb-4">房間代碼：</h2>
+                <h1 className="text-7xl md:text-9xl font-black text-white tracking-widest mb-10">{roomCode}</h1>
+                {myRole === 'host' ? <button onClick={startGame} className="bg-yellow-500 px-12 py-4 rounded-full font-black text-2xl active:scale-95 transition shadow-lg">開始遊戲</button> : 
+                  (!myRole ? <div className="grid grid-cols-2 gap-4">{Object.values(roomData.teams).map(t => <button key={t.id} onClick={()=>selectGroup(t.id)} disabled={t.joined} className={`p-4 rounded-xl font-bold ${t.joined ? 'bg-slate-700 text-slate-500' : 'bg-blue-600 text-white'}`}>{t.name}</button>)}</div> : <div className="text-emerald-400 text-2xl font-black animate-pulse">成功加入 {roomData.teams[myRole].name}！</div>)
+                }
               </div>
-            );
-          }
+              <ErrorModal />
+            </div>
+          );
 
           const currentQ = roomData.questions[roomData.qIndex];
           const isHost = myRole === 'host';
           const myTeam = isHost ? null : roomData.teams[myRole];
-          const myYuanColor = myTeam?.yuan?.color || 'bg-slate-800';
 
           return (
             <div className="min-h-screen bg-slate-900 flex flex-col font-sans overflow-hidden">
-              <ErrorModal />
-              <header className="bg-slate-800 text-white p-4 shadow-lg flex justify-between items-center border-b border-slate-700 z-20">
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-slate-400">房 {roomCode}</span>
-                  <span className={`px-4 py-1.5 rounded-full font-black text-sm tracking-widest ${isHost ? 'bg-slate-600' : myYuanColor}`}>
-                    {isHost ? '主控台' : `${myTeam.name} (${myTeam.yuan?.name})`}
-                  </span>
-                </div>
-                <div className="text-sm font-bold bg-slate-700 px-4 py-1.5 rounded-full border border-slate-600">題：{roomData.qIndex + 1} / {roomData.questions.length}</div>
+              <header className="bg-slate-800 text-white p-4 flex justify-between items-center border-b border-slate-700 shadow-md">
+                <span className="font-bold">房 {roomCode}</span>
+                <span className="bg-slate-700 px-4 py-1 rounded-full text-sm">題：{roomData.qIndex + 1} / {roomData.questions.length}</span>
               </header>
-
-              <main className="flex-1 relative flex flex-col lg:flex-row p-4 gap-4 z-10 overflow-hidden">
-                <div className="lg:w-1/3 grid grid-cols-5 lg:grid-cols-2 gap-2 content-start overflow-x-auto lg:overflow-visible">
+              <main className="flex-1 flex flex-col lg:flex-row p-4 gap-4 overflow-hidden">
+                <div className="lg:w-1/3 grid grid-cols-5 lg:grid-cols-2 gap-2 content-start overflow-x-auto">
                   {Object.values(roomData.teams).map((team) => {
-                    const hpVal = roomData.hp[team.id];
-                    const isBuzzed = roomData.buzzerWinner === team.id;
+                    const hp = roomData.hp[team.id];
+                    const active = roomData.buzzerWinner === team.id;
                     return (
-                      <div key={team.id} className={`relative p-3 rounded-2xl border-4 transition-all flex-shrink-0 w-32 md:w-auto lg:w-full ${isBuzzed ? 'border-yellow-400 bg-white scale-[1.02] z-10' : 'border-slate-800 bg-slate-800'} ${hpVal <= 0 ? 'opacity-40 grayscale' : ''}`}>
-                        <div className="absolute top-0 left-0 w-full h-full rounded-lg overflow-hidden opacity-20"><div className={`h-full ${team.yuan?.color}`} style={{ width: `${Math.min(100, (hpVal/150)*100)}%` }}></div></div>
-                        <div className="relative z-10 flex flex-col items-center">
-                          <div className={`text-[10px] font-bold ${isBuzzed ? 'text-slate-500' : 'text-slate-400'}`}>{team.name}</div>
-                          <h3 className={`font-black text-sm md:text-xl ${isBuzzed ? team.yuan?.text : 'text-white'}`}>{team.yuan?.name}</h3>
-                          <div className={`text-2xl font-black ${isBuzzed ? 'text-slate-900' : 'text-white'}`}>{hpVal} {hpVal <= 0 && <LucideSkull className="inline text-rose-500" size={16}/>}</div>
+                      <div key={team.id} className={`relative p-3 rounded-2xl border-4 transition-all ${active ? 'border-yellow-400 bg-white scale-105 z-10' : 'border-slate-800 bg-slate-800'} ${hp <= 0 ? 'opacity-40 grayscale' : ''}`}>
+                        <div className="absolute inset-0 rounded-lg overflow-hidden opacity-20"><div className={`h-full ${team.yuan?.color}`} style={{width:`${Math.min(100,(hp/150)*100)}%`}}></div></div>
+                        <div className="relative z-10 text-center">
+                          <div className={`text-[10px] font-bold ${active?'text-slate-500':'text-slate-400'}`}>{team.name}</div>
+                          <div className={`font-black ${active?team.yuan?.text:'text-white'}`}>{team.yuan?.name}</div>
+                          <div className={`text-xl font-black ${active?'text-slate-900':'text-white'}`}>{hp} {hp<=0 && <LucideSkull className="inline" />}</div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-
-                <div className="lg:w-2/3 flex flex-col gap-4 h-full relative">
+                <div className="lg:w-2/3 flex flex-col gap-4 relative">
                   {roomData.state !== 'end' ? (
-                    <div className={`flex-1 bg-slate-800 rounded-3xl p-6 shadow-2xl transition-all border-4 flex flex-col justify-center ${roomData.buzzerWinner ? 'border-yellow-400' : 'border-slate-700'} ${(roomData.state === 'gacha' || (roomData.state === 'targeting' && !isHost)) ? 'opacity-30 blur-sm pointer-events-none' : ''}`}>
+                    <div className={`flex-1 bg-slate-800 p-6 rounded-3xl border-4 shadow-xl flex flex-col justify-center ${roomData.buzzerWinner?'border-yellow-400':'border-slate-700'}`}>
                       <h2 className="text-2xl md:text-4xl font-black text-white leading-tight mb-8">{currentQ.text}</h2>
-                      <div className="space-y-4">
-                        {currentQ.options.map((opt, idx) => (
-                          <button key={idx} onClick={() => handleAnswer(idx)} disabled={myRole !== roomData.buzzerWinner} className={`w-full text-left p-5 rounded-2xl border-2 text-xl font-bold transition-all ${myRole === roomData.buzzerWinner ? 'bg-slate-100 border-white text-slate-900 hover:bg-white active:scale-95' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
-                            <span className="inline-block w-8 h-8 rounded-full bg-black/10 text-center leading-8 mr-4 text-sm font-black">{['A','B','C'][idx]}</span>{opt}
-                          </button>
+                      <div className="grid gap-4">
+                        {currentQ.options.map((o, i) => (
+                          <button key={i} onClick={()=>handleAnswer(i)} disabled={myRole !== roomData.buzzerWinner} className={`p-5 rounded-2xl border-2 text-left text-xl font-bold transition-all ${myRole===roomData.buzzerWinner?'bg-slate-100 border-white text-slate-900':'bg-slate-900 border-slate-800 text-slate-500'}`}>{o}</button>
                         ))}
                       </div>
-                      {!isHost && roomData.state === 'playing' && !roomData.buzzerWinner && (
-                        <button onClick={handleBuzz} disabled={roomData.hp[myRole] <= 0} className={`mt-8 w-full py-10 rounded-3xl font-black text-4xl text-white shadow-xl active:translate-y-2 transition-all ${roomData.hp[myRole] <= 0 ? 'bg-slate-600' : myYuanColor}`}>搶答 PUSH!</button>
-                      )}
+                      {!isHost && roomData.state==='playing' && !roomData.buzzerWinner && <button onClick={handleBuzz} className={`mt-10 py-10 rounded-3xl font-black text-4xl text-white shadow-2xl active:translate-y-2 transition-all ${roomData.hp[myRole]<=0?'bg-slate-600':roomData.teams[myRole].yuan?.color}`}>搶答！</button>}
                     </div>
-                  ) : (
-                    <div className="flex-1 bg-slate-800 rounded-3xl p-8 flex flex-col items-center justify-center border-4 border-yellow-500 text-center shadow-2xl animate-fade-in">
-                      <div className="text-7xl mb-6">👑</div>
-                      <h2 className="text-3xl text-yellow-400 font-bold mb-4">國家霸主誕生</h2>
-                      <div className="bg-slate-900/50 p-6 rounded-2xl w-full max-w-md">
-                        {Object.values(roomData.teams).sort((a,b) => roomData.hp[b.id] - roomData.hp[a.id]).map((t, idx) => (
-                          <div key={t.id} className="flex justify-between items-center mb-2 font-black">
-                            <span>{idx+1}. <span className={t.yuan?.text}>{t.yuan?.name}</span></span>
-                            <span className={roomData.hp[t.id] > 0 ? 'text-yellow-400' : 'text-rose-500'}>{roomData.hp[t.id]} HP</span>
-                          </div>
-                        ))}
-                      </div>
-                      {isHost && <button onClick={resetGame} className="mt-8 bg-white text-slate-900 text-xl font-black py-4 px-12 rounded-full shadow-xl active:scale-95 transition">再戰一局</button>}
-                    </div>
-                  )}
-
-                  <div className="h-32 bg-black/60 border-2 border-slate-700 rounded-2xl p-4 overflow-hidden flex flex-col font-mono shadow-inner">
-                    <div className="text-emerald-400 font-bold mb-2 flex items-center border-b border-slate-700 pb-1 text-sm"><LucideZap size={16} className="mr-2"/> 鬥爭日誌</div>
-                    <div className="flex-1 flex flex-col-reverse overflow-hidden">
-                      {roomData.actionLog.map((log, i) => <div key={i} className={`text-sm py-0.5 ${i === 0 ? 'text-white font-bold animate-fade-in' : 'text-slate-500'}`}>{log}</div>)}
-                    </div>
+                  ) : <div className="flex-1 bg-slate-800 p-10 rounded-3xl border-4 border-yellow-500 text-center flex flex-col items-center justify-center">👑<h2 className="text-3xl text-yellow-400 font-black mt-4">國家霸主誕生</h2>{isHost && <button onClick={()=>location.reload()} className="mt-8 bg-white p-4 rounded-full font-black">再戰一局</button>}</div>}
+                  <div className="h-32 bg-black/60 p-4 rounded-2xl border-2 border-slate-700 font-mono text-sm overflow-hidden flex flex-col-reverse">
+                    {roomData.actionLog.map((l, i) => <div key={i} className={i===0?'text-white font-bold':'text-slate-500'}>{l}</div>)}
                   </div>
-
-                  {(roomData.state === 'gacha' || roomData.state === 'targeting') && (
-                    <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
-                      <div className="bg-slate-900 border-4 border-yellow-400 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center animate-fade-in">
-                        <h2 className={`text-4xl font-black mb-6 ${roomData.drawnCard.rarity}`}>{roomData.drawnCard.name}</h2>
-                        <div className="bg-slate-800 p-5 rounded-xl mb-8"><p className="text-xl text-white font-bold leading-relaxed">{roomData.drawnCard.desc}</p></div>
-                        {roomData.state === 'targeting' ? (
-                          myRole === roomData.buzzerWinner ? (
-                            <div className="grid grid-cols-2 gap-3">
-                              {Object.values(roomData.teams).filter(t => t.id !== myRole && roomData.hp[t.id] > 0).map(t => (
-                                <button key={t.id} onClick={() => executeCardSkill(roomData.drawnCard, t.id)} className={`py-4 rounded-xl font-black text-white ${t.yuan?.color} hover:opacity-90 active:scale-95 transition`}>{t.yuan?.name}</button>
-                              ))}
-                            </div>
-                          ) : <div className="text-rose-500 font-black text-2xl animate-pulse">⚠️ 對手正在瞄準！</div>
-                        ) : <div className="text-yellow-400 font-black text-2xl animate-pulse text-center">⚡ 技能發動中...</div>}
-                      </div>
+                  {roomData.state === 'gacha' && (
+                    <div className="absolute inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4">
+                        <div className="bg-slate-800 border-4 border-yellow-400 p-8 rounded-3xl text-center shadow-2xl max-w-sm">
+                            <h2 className={`text-4xl font-black mb-4 ${roomData.drawnCard.rarity}`}>{roomData.drawnCard.name}</h2>
+                            <p className="text-white text-xl mb-8">{roomData.drawnCard.desc}</p>
+                            {roomData.state==='targeting' && myRole===roomData.buzzerWinner ? 
+                                <div className="grid grid-cols-2 gap-2">{Object.values(roomData.teams).filter(t=>t.id!==myRole && roomData.hp[t.id]>0).map(t=><button key={t.id} onClick={()=>executeCardSkill(roomData.drawnCard, t.id)} className={`p-4 rounded-xl text-white font-black ${t.yuan?.color}`}>{t.yuan?.name}</button>)}</div> : <div className="text-yellow-400 font-bold animate-pulse">效果生效中...</div>}
+                        </div>
                     </div>
                   )}
                 </div>
               </main>
+              <ErrorModal />
             </div>
           );
         }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-        setTimeout(() => window.lucide.createIcons(), 1000);
     </script>
 </body>
 </html>
