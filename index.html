@@ -240,22 +240,29 @@
             }
           };
 
-          // --- UI Rendering (Simplified for Demo) ---
-          if (isConnecting) return <div className="text-white p-10">連線中...</div>;
+          // --- UI Rendering ---
+          if (isConnecting) return <div className="text-white p-10">系統連線中...</div>;
 
           if (!roomCode) return (
-            <div className="flex flex-col items-center justify-center min-h-screen gap-10">
+            <div className="flex flex-col items-center justify-center min-h-screen gap-10 bg-slate-900">
                 <h1 className="text-5xl font-black text-white">五院大亂鬥</h1>
-                <div className="flex gap-4">
-                    <button onClick={createRoom} className="bg-emerald-500 p-6 rounded-xl text-white font-bold">建立房間 (老師)</button>
-                    <div className="flex flex-col gap-2">
-                        <input value={joinInput} onChange={e=>setJoinInput(e.target.value)} placeholder="代碼" className="p-4 rounded border" />
-                        <button onClick={joinRoom} className="bg-blue-500 p-4 rounded text-white">加入 (學生)</button>
+                <div className="flex flex-col md:flex-row gap-6">
+                    <button onClick={createRoom} className="bg-emerald-500 hover:bg-emerald-600 p-8 rounded-3xl text-white font-black text-2xl shadow-lg transition-transform active:scale-95">
+                        建立房間 (老師)
+                    </button>
+                    <div className="flex flex-col gap-4 bg-slate-800 p-6 rounded-3xl border-2 border-slate-700">
+                        <input value={joinInput} onChange={e=>setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="4 碼代碼" className="p-4 rounded-xl border-2 border-slate-600 bg-slate-900 text-white text-center text-2xl font-black focus:border-blue-500 outline-none" />
+                        <button onClick={joinRoom} className="bg-blue-500 hover:bg-blue-600 p-4 rounded-xl text-white font-black text-xl shadow-lg transition-transform active:scale-95">
+                            加入遊戲 (學生)
+                        </button>
                     </div>
                 </div>
-                {errorMsg && <div className="text-red-500 bg-red-100 p-4 rounded">{errorMsg}</div>}
+                {errorMsg && <div className="text-rose-400 bg-rose-950/50 border border-rose-500 p-4 rounded-xl max-w-sm text-center font-bold whitespace-pre-wrap">{errorMsg}</div>}
             </div>
           );
+
+          // 防止資料尚未從 Firebase 讀取完成時發生白屏崩潰
+          if (!roomData) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center font-bold text-2xl animate-pulse">正在讀取房間資料...</div>;
 
           if (roomData.state === 'lobby') return (
             <div className="text-white flex flex-col items-center p-10 gap-10">
