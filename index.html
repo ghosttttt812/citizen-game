@@ -245,7 +245,10 @@
 
           if (!roomCode) return (
             <div className="flex flex-col items-center justify-center min-h-screen gap-10 bg-slate-900">
-                <h1 className="text-5xl font-black text-white">五院大亂鬥</h1>
+                <div className="text-center">
+                    <h1 className="text-5xl font-black text-white">五院大亂鬥</h1>
+                    <div className="text-slate-500 text-xs mt-2 font-mono">Build: 2026-05-16-1615 (UTC)</div>
+                </div>
                 <div className="flex flex-col md:flex-row gap-6">
                     <button onClick={createRoom} className="bg-emerald-500 hover:bg-emerald-600 p-8 rounded-3xl text-white font-black text-2xl shadow-lg transition-transform active:scale-95">
                         建立房間 (老師)
