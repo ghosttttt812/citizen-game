@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.10/babel.min.js"></script>
     <style>
-        body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); height: 100dvh; box-sizing: border-box; }
+        body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); height: 100dvh; box-sizing: border-box; background-image: url('bg.png'); background-size: cover; background-position: center; }
         #root { height: 100%; }
         @keyframes bounceIn { 0% { transform: scale(0.3); opacity: 0; } 50% { transform: scale(1.05); opacity: 1; } 70% { transform: scale(0.9); } 100% { transform: scale(1); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -24,7 +24,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-900 text-white overflow-hidden select-none">
+<body class="text-white overflow-hidden select-none">
     <div id="root"></div>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -494,10 +494,10 @@
 
           // ── 畫面分支 ──────────────────────────────────────────
 
-          if (isConnecting) return <div className="h-full flex items-center justify-center font-bold">連線中...</div>;
+          if (isConnecting) return <div className="h-full flex items-center justify-center font-bold bg-black/60">連線中...</div>;
 
           if (!roomCode) return (
-            <div className="h-full flex flex-col items-center justify-center p-6 space-y-6">
+            <div className="h-full flex flex-col items-center justify-center p-6 space-y-6 bg-black/50">
               <ErrorModal />
               <h1 className="text-4xl font-black">五院大亂鬥</h1>
               <p className="text-slate-600 font-mono text-[10px]">Build: {BUILD}</p>
@@ -510,10 +510,10 @@
             </div>
           );
 
-          if (!roomData) return <div className="h-full flex items-center justify-center animate-pulse text-xl">載入資料中...</div>;
+          if (!roomData) return <div className="h-full flex items-center justify-center animate-pulse text-xl bg-black/60">載入資料中...</div>;
 
           if (syncCountdown !== null && syncCountdown > 0) return (
-            <div className="h-full bg-blue-600 flex flex-col items-center justify-center p-10">
+            <div className="h-full bg-blue-900/90 flex flex-col items-center justify-center p-10">
               <h2 className="text-2xl font-bold mb-10 text-blue-200">準備開始...</h2>
               <h1 className="text-[12rem] font-black animate-countdown">{syncCountdown}</h1>
               <p className="mt-10 text-xl font-bold">正在同步所有玩家網路速度</p>
@@ -521,7 +521,7 @@
           );
 
           if (roomData.state === 'lobby') return (
-            <div className="h-full flex flex-col items-center justify-center p-6 bg-slate-900 relative">
+            <div className="h-full flex flex-col items-center justify-center p-6 bg-black/55 relative">
               <ErrorModal />
               <button onClick={leaveRoom} className="absolute top-6 right-6 text-slate-400 bg-slate-800 px-4 py-2 rounded-full text-sm font-bold active:scale-95 transition">離開</button>
               <div className="bg-slate-800 p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm sm:max-w-md">
@@ -559,7 +559,7 @@
           );
 
           if (roomData.state === 'end') return (
-            <div className="h-full flex flex-col items-center justify-center p-6 bg-slate-900 animate-fade-in">
+            <div className="h-full flex flex-col items-center justify-center p-6 bg-black/55 animate-fade-in">
               <ErrorModal />
               <div className="bg-slate-800 p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm">
                 <div className="text-6xl mb-4">👑</div>
@@ -593,7 +593,7 @@
           const buzzIsOpen = timeToOpen === 0;
 
           return (
-            <div className="h-full flex flex-col font-sans overflow-hidden bg-slate-900">
+            <div className="h-full flex flex-col font-sans overflow-hidden bg-black/55">
               <ErrorModal />
               <header className="bg-slate-800 border-b border-slate-700 shadow-md">
                 <div className="p-3 flex justify-between items-center">
