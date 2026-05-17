@@ -1,14 +1,15 @@
-# 突發事件圖片
+# 圖片資料夾
 
-把每個院的代表圖（建築、徽章、或現任院長照片均可）放在這個資料夾，命名如下：
+目前突發事件用的院長照片是放在 **專案根目錄**（與 index.html 同層），命名規則：
 
-- `yuan_executive.jpg`   — 行政院
-- `yuan_legislative.jpg` — 立法院
-- `yuan_judicial.jpg`    — 司法院
-- `yuan_control.jpg`     — 監察院
-- `yuan_examination.jpg` — 考試院
+- `行政院院長-卓榮泰.jpg`
+- `立法院院長-韓國瑜.jpg`
+- `司法院院長-謝銘洋.jpg`
+- `監察院院長-李鴻鈞.jpg`
+- `考試院院長-周弘憲_2.jpg`
 
-支援 `.jpg`、`.png`、`.webp` 等格式，副檔名請與 `index.html` 中 `SURPRISE_EVENTS`
-裡的 `img:` 欄位一致。沒有放圖時遊戲不會報錯，會自動顯示對應 emoji 替代。
+要更新院長換人時：
+1. 把新照片放到專案根目錄並命名為「XX院院長-人名.jpg」
+2. 編輯 `index.html` 中 `SURPRISE_EVENTS` 陣列裡對應的 `img:` 路徑與 `options[0]`（正解）
 
-建議尺寸：寬高比 4:3 或 16:9，長邊不超過 1200px 以保持載入速度。
+照片建議：人物半身或大頭照、長邊 600-1200px、JPG 即可。

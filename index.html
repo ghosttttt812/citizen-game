@@ -271,7 +271,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-20';
+        const BUILD = '20260517-21';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -985,6 +985,48 @@
                     scores[lw] = Math.max(0, (scores[lw]||0) - lp);
                     log += `，撤銷 ${roomData.teams[lw]?.yuan?.name} 上回合得分 (-${lp} 分)`;
                   } else { log += `，上回合無可撤銷的得分`; } }
+                break;
+              case 'steal-exclusive':
+                // 機密外洩：奪走指定院的院專屬技能卡
+                if (targetId && hands[targetId]) {
+                  const ti = hands[targetId].findIndex(c => c.isExclusive && c.usedOnQ === null);
+                  if (ti !== -1) {
+                    const stolen = hands[targetId][ti];
+                    // 對方失去（標記為棄置）
+                    hands[targetId][ti] = { ...stolen, usedOnQ: -1 };
+                    // 我方獲得一張新拷貝（重置 usedOnQ 才能立即使用）
+                    hands[myRole].push({
+                      ...stolen,
+                      uniqueId: `${myRole}_stole_exc_${Date.now()}`,
+                      usedOnQ: null,
+                    });
+                    log += `，奪走 ${targetYuan} 的【${stolen.name}】納為己用`;
+                  } else {
+                    log += `，${targetYuan} 已無院專屬技能可奪`;
+                  }
+                }
+                break;
+              case 'steal-common':
+                // 擴權爭議：盲抽一張對方未使用的共同卡
+                if (targetId && hands[targetId]) {
+                  const candidates = [];
+                  hands[targetId].forEach((c, idx) => {
+                    if (!c.isExclusive && c.usedOnQ === null) candidates.push({ c, idx });
+                  });
+                  if (candidates.length > 0) {
+                    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                    const stolen = pick.c;
+                    hands[targetId][pick.idx] = { ...stolen, usedOnQ: -1 };
+                    hands[myRole].push({
+                      ...stolen,
+                      uniqueId: `${myRole}_stole_com_${Date.now()}`,
+                      usedOnQ: null,
+                    });
+                    log += `，盲抽 ${targetYuan} 的【${stolen.name}】納為己用`;
+                  } else {
+                    log += `，${targetYuan} 無可偷的共同卡`;
+                  }
+                }
                 break;
               default:
                 log += `（效果開發中）`;
