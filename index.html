@@ -224,7 +224,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-15';
+        const BUILD = '20260517-16';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -1550,17 +1550,29 @@
                 <div className={`flex-1 app-card p-4 rounded-2xl border-4 flex flex-col gap-3 overflow-y-auto min-h-0
                   ${roomData.buzzerWinner ? 'border-yellow-400' : buzzIsOpen && roomData.state === 'playing' ? 'border-emerald-600' : 'app-border'}`}
                   style={{ WebkitOverflowScrolling: 'touch' }}>
-                  <h2 className="text-xl sm:text-2xl font-black mobile-q-text shrink-0">{q.text}</h2>
-                  <div className="flex flex-col gap-2.5">
-                    {q.options.map((o, i) => (
-                      <button key={i} onClick={() => handleAnswer(i)} disabled={myRole !== roomData.buzzerWinner}
-                        className={`p-4 sm:p-5 rounded-xl border-2 text-left text-lg font-bold mobile-btn transition
-                          ${myRole === roomData.buzzerWinner ? 'app-card-3 app-text app-accent-border active:scale-95 shadow-md' : 'app-card-2 app-border-soft app-text-3'}`}>
-                        <span className="inline-block w-7 h-7 rounded-full text-center leading-7 mr-3 text-sm font-black shrink-0" style={{ background:'rgba(157,144,119,0.25)' }}>{['A', 'B', 'C'][i]}</span>
-                        {o}
-                      </button>
-                    ))}
-                  </div>
+                  {/* 搶答前：題目佔滿整個卡片置中；搶答後：題目在上、選項在下 */}
+                  {!roomData.buzzerWinner ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
+                      <h2 className="text-2xl sm:text-3xl font-black mobile-q-text app-text leading-relaxed">{q.text}</h2>
+                      <p className="mt-6 text-sm app-text-3 font-bold tracking-wider">
+                        {buzzIsOpen ? '⚡ 搶答開放！' : '⏳ 倒數中…按下搶答後才顯示選項'}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <h2 className="text-xl sm:text-2xl font-black mobile-q-text shrink-0 app-text">{q.text}</h2>
+                      <div className="flex flex-col gap-2 animate-fade-in">
+                        {q.options.map((o, i) => (
+                          <button key={i} onClick={() => handleAnswer(i)} disabled={myRole !== roomData.buzzerWinner}
+                            className={`p-3 sm:p-4 rounded-xl border-2 text-left text-base font-bold mobile-btn transition
+                              ${myRole === roomData.buzzerWinner ? 'app-card-3 app-text app-accent-border active:scale-95 shadow-md' : 'app-card-2 app-border-soft app-text-3'}`}>
+                            <span className="inline-block w-7 h-7 rounded-full text-center leading-7 mr-3 text-sm font-black shrink-0" style={{ background:'rgba(157,144,119,0.25)' }}>{['A', 'B', 'C', 'D'][i]}</span>
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* 搶答／技能卡區域 —— 固定高度，避免倒數/卡片/搶答按鈕切換時題目跳動 */}
