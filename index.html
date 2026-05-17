@@ -25,8 +25,15 @@
         .flip-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 1rem; overflow: hidden; padding: 1rem; }
         .flip-back-face { transform: rotateY(180deg); }
         @media (max-width: 640px) {
-            .mobile-btn { padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 1.25rem; }
-            .mobile-q-text { font-size: 1.5rem; line-height: 2rem; }
+            .mobile-btn { padding-top: 1rem; padding-bottom: 1rem; font-size: 1.1rem; }
+            .mobile-q-text { font-size: 1.35rem; line-height: 1.8rem; }
+        }
+        /* iOS 安全區域：fixed 覆蓋層避開瀏海與 home indicator */
+        .safe-overlay {
+          padding-top: max(1.5rem, env(safe-area-inset-top));
+          padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+          padding-left: 1.5rem;
+          padding-right: 1.5rem;
         }
     </style>
 </head>
@@ -168,7 +175,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-11';
+        const BUILD = '20260517-12';
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -889,18 +896,56 @@
                   {/* ── Tab 0: 遊戲規則 ── */}
                   {rulesTab === 0 && (
                     <div className="space-y-3 max-w-sm mx-auto">
-                      {[
-                        { icon:'🏛️', title:'選擇陣營', body:'每組選一個院，獲得該院的專屬技能卡，並從共同卡牌堆中隨機抽取一張。抽完共同卡後即確認陣營，無法重選。' },
-                        { icon:'⚡', title:'搶答得分', body:'答對 +40 分，答錯 -15 分。分數歸零後即淘汰，無法繼續搶答。每題有 5 秒倒數，倒數結束才能搶答。' },
-                        { icon:'🃏', title:'技能卡規則', body:'每張技能卡整局只能使用一次，用完就永久消失。每次搶答倒數期間最多發動一張技能卡，按下搶答後不能再發動技能。' },
-                      ].map(r => (
-                        <div key={r.title} className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                          <h3 className="text-yellow-400 font-black mb-2">{r.icon} {r.title}</h3>
-                          <p className="text-slate-300 text-sm leading-relaxed">{r.body}</p>
+                      {/* 基本流程 */}
+                      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                        <h3 className="text-yellow-400 font-black mb-3 text-base">🎮 基本流程</h3>
+                        <ol className="text-slate-300 text-sm leading-relaxed space-y-1.5 list-decimal pl-5">
+                          <li>每組選擇想要的院（行政、立法、司法、考試、監察）</li>
+                          <li>每院開局自動獲得「五院專屬技能卡」一張</li>
+                          <li>再從牌堆中隨機抽取一張「共同技能卡」</li>
+                          <li>抽完共同卡後即確認陣營，無法重選</li>
+                          <li>老師按下「同步啟動」，全員 5 秒倒數後正式開始</li>
+                        </ol>
+                      </div>
+
+                      {/* 分數系統 */}
+                      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                        <h3 className="text-yellow-400 font-black mb-3 text-base">⚡ 分數系統</h3>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-3">
+                            <span className="text-emerald-400 font-black text-lg w-12 text-center">+40</span>
+                            <span className="text-slate-300">答對加分</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-rose-400 font-black text-lg w-12 text-center">-15</span>
+                            <span className="text-slate-300">答錯／超時扣分</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-slate-500 font-black text-lg w-12 text-center">💀</span>
+                            <span className="text-slate-300">分數歸零即淘汰，無法再答題</span>
+                          </div>
+                          <p className="text-slate-400 text-xs mt-3 pt-2 border-t border-slate-700 leading-relaxed">
+                            開局各組 100 分，沒有上限。技能卡會大幅改變分數，請謹慎使用。
+                          </p>
                         </div>
-                      ))}
-                      <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50 text-center">
-                        <p className="text-slate-400 text-xs">如果被攻擊者有護盾（民意支持）或行政院反彈效果，攻擊可能無效甚至傷到自己，要小心！</p>
+                      </div>
+
+                      {/* 搶答流程 */}
+                      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                        <h3 className="text-yellow-400 font-black mb-3 text-base">🚨 搶答流程</h3>
+                        <ol className="text-slate-300 text-sm leading-relaxed space-y-1.5 list-decimal pl-5">
+                          <li>每題開始有 <span className="text-yellow-300 font-black">5 秒</span>技能發動倒數</li>
+                          <li>倒數期間最多發動一張技能卡（院專屬或共同卡）</li>
+                          <li>有多人發動時依序發動，效果全場可見，並暫停題目時間</li>
+                          <li>倒數結束後「搶答」按鈕亮起，最快按下者獲得答題權</li>
+                          <li>答題者有 10 秒作答時間，超時視為答錯</li>
+                          <li>答錯則本題無法再搶答，由其他組接續</li>
+                          <li>每張技能卡整局只能用一次，用完永久消失</li>
+                        </ol>
+                      </div>
+
+                      <div className="bg-slate-800/50 rounded-2xl p-3 border border-slate-700/50 text-center">
+                        <p className="text-slate-400 text-xs">⚠ 攻擊可能被「民意支持」護盾或「行政院」反彈抵銷，要小心！</p>
                       </div>
                     </div>
                   )}
@@ -1149,10 +1194,11 @@
                 const playerTeam = roomData.teams[ov.playerGroup];
                 const targetTeam = ov.targetGroup ? roomData.teams[ov.targetGroup] : null;
                 return (
-                  <div className={`fixed inset-0 z-[80] flex flex-col items-center justify-center p-5 animate-fade-in
+                  <div className={`fixed inset-0 z-[80] flex flex-col items-center justify-center safe-overlay animate-fade-in overflow-y-auto
                     ${isTarget ? 'bg-red-950' : 'bg-slate-950'}`}
                     style={{ backgroundColor: isTarget ? 'rgba(60,0,0,0.97)' : 'rgba(2,6,23,0.97)',
-                             border: isTarget ? '4px solid #ef4444' : '4px solid #334155' }}>
+                             border: isTarget ? '4px solid #ef4444' : '4px solid #334155',
+                             WebkitOverflowScrolling: 'touch' }}>
 
                   {/* 被攻擊者專屬：大字提示 */}
                   {isTarget && (
@@ -1213,9 +1259,9 @@
 
               {/* ── 選擇攻擊目標全域遮罩（fixed，不受 overflow-hidden 影響） ── */}
               {pendingCard && myRole !== 'host' && (
-                <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center p-6 animate-fade-in"
-                  style={{ background: 'rgba(10,15,35,0.97)' }}>
-                  <div className="w-full max-w-xs">
+                <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center safe-overlay animate-fade-in overflow-y-auto"
+                  style={{ background: 'rgba(10,15,35,0.97)', WebkitOverflowScrolling: 'touch' }}>
+                  <div className="w-full max-w-xs my-auto">
                     <p className="text-slate-400 text-sm text-center mb-2">⚡ 準備發動技能</p>
                     <div className="rounded-2xl p-4 text-center mb-5"
                       style={{ background: 'rgba(234,179,8,0.15)', border: '2px solid rgba(234,179,8,0.7)' }}>
@@ -1360,25 +1406,29 @@
                   </div>
                 </div>
 
-                {/* 題目區 */}
-                <div className="flex-1 flex flex-col gap-3 relative min-h-0">
-                  <div className={`flex-1 bg-slate-800 p-5 rounded-2xl border-4 flex flex-col justify-center
-                    ${roomData.buzzerWinner ? 'border-yellow-400' : buzzIsOpen && roomData.state === 'playing' ? 'border-emerald-600' : 'border-slate-700'}`}>
-                    <h2 className="text-xl sm:text-2xl font-black mb-6 mobile-q-text">{q.text}</h2>
-                    <div className="flex-1 flex flex-col gap-3 justify-center">
-                      {q.options.map((o, i) => (
-                        <button key={i} onClick={() => handleAnswer(i)} disabled={myRole !== roomData.buzzerWinner}
-                          className={`p-4 sm:p-5 rounded-xl border-2 text-left text-lg font-bold mobile-btn transition
-                            ${myRole === roomData.buzzerWinner ? 'bg-slate-100 text-black border-white active:scale-95' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
-                          <span className="inline-block w-7 h-7 rounded-full bg-black/10 text-center leading-7 mr-3 text-sm font-black shrink-0">{['A', 'B', 'C'][i]}</span>
-                          {o}
-                        </button>
-                      ))}
-                    </div>
-                    {/* 搶答區域 */}
-                    {myRole !== 'host' && roomData.state === 'playing' && !roomData.buzzerWinner && renderBuzzerArea(team)}
+                {/* 題目區（可滾動，避免小螢幕內容被截斷） */}
+                <div className={`flex-1 bg-slate-800 p-4 rounded-2xl border-4 flex flex-col gap-3 overflow-y-auto min-h-0
+                  ${roomData.buzzerWinner ? 'border-yellow-400' : buzzIsOpen && roomData.state === 'playing' ? 'border-emerald-600' : 'border-slate-700'}`}
+                  style={{ WebkitOverflowScrolling: 'touch' }}>
+                  <h2 className="text-xl sm:text-2xl font-black mobile-q-text shrink-0">{q.text}</h2>
+                  <div className="flex flex-col gap-2.5">
+                    {q.options.map((o, i) => (
+                      <button key={i} onClick={() => handleAnswer(i)} disabled={myRole !== roomData.buzzerWinner}
+                        className={`p-4 sm:p-5 rounded-xl border-2 text-left text-lg font-bold mobile-btn transition
+                          ${myRole === roomData.buzzerWinner ? 'bg-slate-100 text-black border-white active:scale-95' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
+                        <span className="inline-block w-7 h-7 rounded-full bg-black/10 text-center leading-7 mr-3 text-sm font-black shrink-0">{['A', 'B', 'C'][i]}</span>
+                        {o}
+                      </button>
+                    ))}
                   </div>
                 </div>
+
+                {/* 搶答／技能卡區域（獨立區塊，不受題目卡內 overflow 影響） */}
+                {myRole !== 'host' && roomData.state === 'playing' && !roomData.buzzerWinner && (
+                  <div className="shrink-0 max-h-[42vh] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    {renderBuzzerArea(team)}
+                  </div>
+                )}
 
                 {/* 戰況 log */}
                 <div className="h-20 bg-black/60 p-3 rounded-xl border-2 border-slate-700 font-mono text-[10px] overflow-hidden flex flex-col-reverse shrink-0">
