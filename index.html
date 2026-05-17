@@ -271,7 +271,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-21';
+        const BUILD = '20260517-22';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -405,11 +405,24 @@
             text:'誰是現任考試院院長？',
             options:['周弘憲', '黃榮村', '伍錦霖', '關中'], answer:0 },
         ];
+        // 兩種題型隨機：
+        //   name   — 「誰是 X院 的院長？」    選項是人名
+        //   yuan   — 「這是哪個院的院長？」  選項是院名（不顯示「關於 X院」標題）
         const buildSurpriseEvent = () => {
           const t = SURPRISE_EVENTS[Math.floor(Math.random() * SURPRISE_EVENTS.length)];
-          const correctOption = t.options[t.answer];
-          const shuffled = shuffle(t.options);
-          return { yuanId:t.yuanId, yuan:t.yuan, img:t.img, emoji:t.emoji, text:t.text, options:shuffled, answer:shuffled.indexOf(correctOption) };
+          const variant = Math.random() < 0.5 ? 'name' : 'yuan';
+          if (variant === 'name') {
+            const correctOption = t.options[t.answer];
+            const shuffled = shuffle(t.options);
+            return { yuanId:t.yuanId, yuan:t.yuan, img:t.img, emoji:t.emoji, text:t.text,
+                     options:shuffled, answer:shuffled.indexOf(correctOption), variant };
+          }
+          // variant === 'yuan'
+          const allYuans = SURPRISE_EVENTS.map(e => e.yuan);
+          const distractors = shuffle(allYuans.filter(y => y !== t.yuan)).slice(0, 3);
+          const options = shuffle([t.yuan, ...distractors]);
+          return { yuanId:t.yuanId, yuan:t.yuan, img:t.img, emoji:t.emoji,
+                   text:'這是哪個院的院長？', options, answer:options.indexOf(t.yuan), variant };
         };
 
         const CORRECT_POINTS = 40;      // 答對得分
@@ -850,6 +863,18 @@
             });
           };
 
+          // 銓敘權：若 myRole 身上有 mustPayExam，扣 10 給考試院（回傳新分數與是否有扣）
+          const applyExamPayment = (scoresIn) => {
+            const newScores = { ...scoresIn };
+            const mustPay = roomData.statusEffects?.[myRole]?.mustPayExam;
+            if (!mustPay) return { newScores, paid: false, examGroupId: null };
+            const examTeam = Object.values(roomData.teams).find(t => t.yuan?.id === 'examination' && t.joined);
+            if (!examTeam || examTeam.id === myRole) return { newScores, paid: false, examGroupId: null };
+            newScores[myRole] = Math.max(0, (newScores[myRole] || 0) - 10);
+            newScores[examTeam.id] = (newScores[examTeam.id] || 0) + 10;
+            return { newScores, paid: true, examGroupId: examTeam.id, examYuan: examTeam.yuan?.name };
+          };
+
           const handleAnswer = (idx) => {
             const isCorrect = idx === roomData.questions[roomData.qIndex].answer;
             const myYuan = roomData.teams[myRole].yuan.name;
@@ -861,10 +886,14 @@
               : -WRONG_PENALTY;
             markLocalAnswer(idx, isCorrect, 'regular', myYuan, myYuanText, localPoints);
 
+            // 銓敘權影響：先繳 10 分給考試院（若本人有 mustPayExam）
+            const pay = applyExamPayment(roomData.scores);
+            const payLog = pay.paid ? `（先繳 10 分給 ${pay.examYuan}）` : '';
+
             if (isCorrect) {
               const isDouble = roomData.statusEffects?.[myRole]?.doublePoints;
               const gained = isDouble ? CORRECT_POINTS * 2 : CORRECT_POINTS;
-              const newScores = { ...roomData.scores, [myRole]: (roomData.scores[myRole] || 0) + gained };
+              const newScores = { ...pay.newScores, [myRole]: (pay.newScores[myRole] || 0) + gained };
               // 清除本人 doublePoints 效果
               const newStatus = { ...roomData.statusEffects };
               if (newStatus[myRole]) newStatus[myRole] = { ...newStatus[myRole], doublePoints: false };
@@ -874,7 +903,7 @@
                 answerDeadline: null,
                 lastRoundWinner: myRole,
                 lastRoundPoints: gained,
-                actionLog: [`✅ ${myYuan} 答對！+${gained} 分${isDouble ? '（重大建設加倍！）' : ''}`, ...roomData.actionLog].slice(0, 5)
+                actionLog: [`✅ ${myYuan} 答對！+${gained} 分${isDouble ? '（重大建設加倍！）' : ''}${payLog}`, ...roomData.actionLog].slice(0, 5)
               });
               setTimeout(() => nextQ(), 1500);
             } else {
@@ -889,7 +918,10 @@
 
           // 答錯/超時的共用邏輯
           const applyWrongAnswer = (yuanName, reason) => {
-            const newScores = { ...roomData.scores, [myRole]: Math.max(0, (roomData.scores[myRole] || 0) - WRONG_PENALTY) };
+            // 銓敘權：答錯/超時也算「答題」，要繳費
+            const pay = applyExamPayment(roomData.scores);
+            const payLog = pay.paid ? `（先繳 10 分給 ${pay.examYuan}）` : '';
+            const newScores = { ...pay.newScores, [myRole]: Math.max(0, (pay.newScores[myRole] || 0) - WRONG_PENALTY) };
             const newWrong = [...(roomData.wrongAnswerers || []), myRole];
             // 只考慮已加入的組別，避免未加入組別卡住流程
             const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
@@ -898,7 +930,7 @@
             if (remaining.length === 0) {
               roomRef().update({
                 scores: newScores, buzzerWinner: null, wrongAnswerers: [], answerDeadline: null,
-                actionLog: [`❌ ${yuanName} ${reason}！全員作答完畢，跳過本題`, ...roomData.actionLog].slice(0, 5)
+                actionLog: [`❌ ${yuanName} ${reason}！全員作答完畢，跳過本題${payLog}`, ...roomData.actionLog].slice(0, 5)
               });
               setTimeout(() => nextQ(), 1500);
             } else {
@@ -906,7 +938,7 @@
                 scores: newScores, buzzerWinner: null, answerDeadline: null,
                 wrongAnswerers: newWrong,
                 buzzerOpenAt: Date.now() + BUZZ_DELAY_RETRY * 1000,
-                actionLog: [`❌ ${yuanName} ${reason}！換人搶答 (-${WRONG_PENALTY} 分)`, ...roomData.actionLog].slice(0, 5)
+                actionLog: [`❌ ${yuanName} ${reason}！換人搶答 (-${WRONG_PENALTY} 分)${payLog}`, ...roomData.actionLog].slice(0, 5)
               });
             }
           };
@@ -936,13 +968,31 @@
             switch (card.type) {
               case 'target':
                 if (targetId) {
-                  scores[targetId] = Math.max(0, (scores[targetId] || 0) - (card.dmg || 50));
-                  if (card.id === 'con' && hands[targetId]) {
-                    const ci = hands[targetId].findIndex(c => !c.isExclusive && c.usedOnQ === null);
-                    if (ci !== -1) hands[targetId][ci].usedOnQ = -1; // -1 = 被棄置
+                  // 民意支持 / 反彈卡 / 銓敘權 護盾擋下傷害
+                  if (statusEffects[targetId]?.shielded) {
+                    statusEffects[targetId].shielded = false; // 消耗護盾
+                    log += `，但 ${targetYuan} 護盾抵銷了傷害！`;
+                  } else {
+                    scores[targetId] = Math.max(0, (scores[targetId] || 0) - (card.dmg || 50));
+                    if (card.id === 'con' && hands[targetId]) {
+                      const ci = hands[targetId].findIndex(c => !c.isExclusive && c.usedOnQ === null);
+                      if (ci !== -1) hands[targetId][ci].usedOnQ = -1; // -1 = 被棄置
+                    }
+                    log += `，鎖定 ${targetYuan}（-${card.dmg || 50} 分）`;
                   }
-                  log += `，鎖定 ${targetYuan}（-${card.dmg || 50} 分）`;
                 }
+                break;
+              case 'self':
+                // 考試院 銓敘權：本人免疫扣分；其他院本回合答題前要繳 10 分
+                if (!statusEffects[myRole]) statusEffects[myRole] = {};
+                statusEffects[myRole].shielded = true;
+                Object.keys(statusEffects).forEach(gid => {
+                  if (gid !== myRole) {
+                    if (!statusEffects[gid]) statusEffects[gid] = {};
+                    statusEffects[gid].mustPayExam = true;
+                  }
+                });
+                log += `，本回合免疫扣分；其他院答題前須繳 10 分給 ${myYuan}`;
                 break;
               case 'redistribute':
                 { const entries = Object.entries(scores).sort((a,b) => b[1]-a[1]);
@@ -1067,7 +1117,12 @@
           const nextQ = () => {
             if (!roomData || roomData.state !== 'playing') return; // 防止重複或錯誤觸發
             const newStatus = JSON.parse(JSON.stringify(roomData.statusEffects || {}));
-            Object.keys(newStatus).forEach(k => { newStatus[k].cardBanned = false; });
+            // 換題清除：禁卡、銓敘權繳費、護盾（一回合性效果）
+            Object.keys(newStatus).forEach(k => {
+              newStatus[k].cardBanned = false;
+              newStatus[k].mustPayExam = false;
+              newStatus[k].shielded = false;
+            });
 
             // 觸發突發事件：在第 4~8 題（qIndex 3~7）其中一題結束後突然插入
             const shouldTriggerSurprise = !roomData.surpriseTriggered
@@ -1668,9 +1723,11 @@
                 </div>
 
                 <main className="flex-1 flex flex-col p-4 gap-3 overflow-auto" style={{ WebkitOverflowScrolling:'touch' }}>
-                  {/* 題目（含圖片） */}
+                  {/* 題目（含圖片）— variant === 'yuan' 時不顯示院別標題（會洩題） */}
                   <div className="app-card-3 rounded-2xl p-5 border-2 border-rose-300 text-center app-shadow">
-                    <p className={`text-xs font-black mb-2 ${yuanInfo?.text || 'app-accent-text'}`}>關於 {ev.yuan}</p>
+                    {ev.variant === 'yuan'
+                      ? <p className="text-xs font-black mb-2 app-accent-text">看照片猜院別</p>
+                      : <p className={`text-xs font-black mb-2 ${yuanInfo?.text || 'app-accent-text'}`}>關於 {ev.yuan}</p>}
                     {/* 圖片：載入失敗自動 fallback 到 emoji（避免黑 box） */}
                     {ev.img ? (
                       <img src={encodeURI(ev.img)} alt={ev.yuan}
