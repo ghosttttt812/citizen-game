@@ -168,7 +168,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-10';
+        const BUILD = '20260517-11';
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -208,6 +208,29 @@
           judicial:    '最佳時機：對手剛答對後立刻發動，直接撤銷剛獲得的分數。',
           examination: '最佳時機：自己分數領先時使用，免疫攻擊又讓其他院付出代價。',
           control:     '最佳時機：攻擊手中持有強力共同卡的對手，摧毀對手的手牌優勢。',
+        };
+
+        // 院專屬卡完整說明（CardRule.txt 原文）
+        const YUAN_CARD_FULL_DESC = {
+          executive:   '當行政院被其他院扣分或攻擊時，可立即打出此卡「抵銷該次傷害」，並將等量分數反彈扣回攻擊者。若攻擊者是立法院，加碼讓立法院「暫停搶答 / 行動一回合」。',
+          legislative: '指定其他任一院，直接扣除其 50 分。',
+          judicial:    '宣告「上一回合」回答正確的院的行動「違憲」。強制將那一組在上回合獲得的所有分數扣除。',
+          examination: '發動此卡的回合，考試院免疫一切扣分攻擊（象徵文官中立）。此外，本回合其他四院若要答題或獲得分數，必須先「各繳交 10 分」給考試院。',
+          control:     '指定任一院，直接沒收並「丟棄」他們手上的一張共同抽牌卡，並扣除對方 20 分（象徵糾舉失職）。',
+        };
+
+        // 共同卡完整說明（CardRule.txt 原文）
+        const COMMON_CARD_FULL_DESC = {
+          c01: '發動後，下一回合的題目，該組擁有「絕對優先搶答權」（不需比拼手速）。若答錯，則開放其他組搶答。',
+          c02: '發動此卡的回合，若該組搶答正確，該題獲得的分數「直接乘以 2 倍」（共 80 分）。',
+          c03: '強制目前全場「分數最高」的組別，無條件轉移 20 分給目前「分數最低」的組別（若自己最低，就是轉給自己）。',
+          c04: '指定任一組，直接奪走對方的「五院專屬技能卡」納為己用（對方失去該技能，且你可以發動一次該院專屬技能）。',
+          c05: '隨機從指定的一組手中，盲抽（偷走）一張他們尚未使用的「共同抽牌卡」，納為己用。若對方沒有共同卡則無效。',
+          c06: '讓指定的一組深陷公關危機。該組在「下一回合」中，雖然可以正常搶答得分，但「禁止發動任何卡牌技能（含五院專屬卡與共同卡）」。',
+          c07: '這是一張「護身符」，可蓋牌保留在手中。當遭受任何扣分攻擊（包含五院專屬技能或其他卡牌）時可立即翻開，完全「抵銷該次攻擊」。',
+          c08: '指定另一組強行結盟。在「下一回合」中，只要該組答題得分，發動此卡的組別也能「免費獲得一半的分數」。',
+          c09: '發動者可以自行選擇要更動「分數」或「牌卡」。全場五個組別必須將選定的項目（目前所有的分數，或手中所有未使用的共同牌卡），全部統一往左邊傳交給下一組。',
+          c10: '國庫撥款！發動後，場上所有組別（包含自己）立刻各加 10 分。作為代價，發動此卡的組別可以在牌堆中免費「抽 1 張」新的共同卡。',
         };
 
         // QUESTION_BANK 來自外部 questions.js
@@ -791,25 +814,9 @@
                       )}
                     </div>
 
-                    {pendingCard ? (
-                      <div className="p-2.5">
-                        <p className="text-rose-300 text-xs font-bold mb-2">選擇攻擊目標：</p>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {Object.values(roomData.teams)
-                            .filter(t => t.joined && t.id !== myRole && (roomData.scores?.[t.id] ?? 100) > 0)
-                            .map(t => (
-                              <button key={t.id} onClick={() => playCard(pendingCard, t.id)}
-                                className={`p-2 rounded-xl text-white font-black text-xs active:scale-95 transition ${t.yuan?.color}`}>
-                                {t.yuan?.name}
-                              </button>
-                            ))}
-                        </div>
-                        <button onClick={() => setPendingCard(null)} className="mt-2 w-full text-slate-500 text-xs py-1">取消</button>
-                      </div>
-                    ) : (
                       <div className="p-2 space-y-1.5">
                         {visibleCards.map(card => {
-                          const permanentlyUsed = card.usedOnQ !== null; // 整局已使用
+                          const permanentlyUsed = card.usedOnQ !== null;
                           const canActivate = !cardBanned && !alreadyPlayedThisRound && !permanentlyUsed;
                           return (
                             <button key={card.uniqueId}
@@ -841,7 +848,6 @@
                           );
                         })}
                       </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -908,9 +914,9 @@
                         const yuan = YUAN_DB.find(y => y.id === key);
                         const flipped = !!flippedCards[key];
                         return (
-                          <div key={key} className="flip-card" style={{ height:'170px' }}
+                          <div key={key} className="flip-card" style={{ height:'210px' }}
                             onClick={() => { sound.draw(); setFlippedCards(p => ({...p, [key]: !p[key]})); }}>
-                            <div className={`flip-inner${flipped ? ' is-flipped' : ''}`} style={{ height:'170px' }}>
+                            <div className={`flip-inner${flipped ? ' is-flipped' : ''}`} style={{ height:'210px' }}>
                               {/* 正面 */}
                               <div className="flip-face flex flex-col justify-between"
                                 style={{ background:'rgba(22,30,50,0.95)', border:'2px solid rgba(234,179,8,0.45)' }}>
@@ -922,9 +928,9 @@
                                     </div>
                                     <span className="text-[9px] text-yellow-600 border border-yellow-800 bg-yellow-900/30 px-1.5 py-0.5 rounded shrink-0">院專屬</span>
                                   </div>
-                                  <p className="text-slate-300 text-[11px] leading-relaxed">{card.desc}</p>
+                                  <p className="text-slate-300 text-[11px] leading-relaxed">{YUAN_CARD_FULL_DESC[key]}</p>
                                 </div>
-                                <p className="text-slate-600 text-[9px]">點擊查看使用技巧 →</p>
+                                <p className="text-slate-600 text-[9px] mt-2">點擊查看使用技巧 →</p>
                               </div>
                               {/* 背面 */}
                               <div className="flip-face flip-back-face flex flex-col justify-between"
@@ -933,7 +939,7 @@
                                   <p className="text-indigo-400 text-[10px] font-black mb-2">💡 使用技巧</p>
                                   <p className="text-white text-sm leading-relaxed">{YUAN_CARD_TIPS[key]}</p>
                                 </div>
-                                <p className="text-slate-600 text-[9px]">← 點擊返回</p>
+                                <p className="text-slate-600 text-[9px] mt-2">← 點擊返回</p>
                               </div>
                             </div>
                           </div>
@@ -957,7 +963,7 @@
                             <div key={card.id} className={`rounded-xl p-3 border mb-1.5 animate-fade-in ${cat.bg} ${cat.border}`}
                               style={{ animationDelay:`${i*60}ms` }}>
                               <p className="text-white font-black text-sm mb-0.5">🃏 {card.name}</p>
-                              <p className="text-slate-300 text-[11px] leading-relaxed">{card.desc}</p>
+                              <p className="text-slate-300 text-[11px] leading-relaxed">{COMMON_CARD_FULL_DESC[card.id] || card.desc}</p>
                             </div>
                           ))}
                         </div>
@@ -1159,11 +1165,25 @@
                     </div>
                   )}
 
-                  {/* 發動者資訊 */}
-                  <p className="text-slate-400 text-sm mb-0.5">⚡ 技能發動！</p>
-                  <p className={`text-xl font-black mb-3 ${playerTeam?.yuan?.text || 'text-white'}`}>
-                    {ov.yuanName}
-                  </p>
+                  {/* 旁觀者：大字提示 */}
+                  {!isTarget && !isPlayer && (
+                    <div className="mb-4 text-center">
+                      <div className="text-5xl mb-2">⚡</div>
+                      <p className={`text-2xl font-black ${playerTeam?.yuan?.text || 'text-white'}`}>{ov.yuanName}</p>
+                      <p className="text-slate-300 text-lg font-bold mt-1">正在發動技能中...</p>
+                      <p className="text-slate-500 text-xs mt-1">時間暫停，請稍候</p>
+                    </div>
+                  )}
+
+                  {/* 發動者資訊（被攻擊者 / 發動者自己 用的小標） */}
+                  {(isTarget || isPlayer) && (
+                    <p className="text-slate-400 text-sm mb-0.5">⚡ 技能發動！</p>
+                  )}
+                  {(isTarget || isPlayer) && (
+                    <p className={`text-xl font-black mb-3 ${playerTeam?.yuan?.text || 'text-white'}`}>
+                      {ov.yuanName}
+                    </p>
+                  )}
 
                   {/* 卡牌框 */}
                   <div className="rounded-2xl p-4 text-center w-full max-w-xs mb-3"
@@ -1190,6 +1210,37 @@
                   </div>
                 );
               })()}
+
+              {/* ── 選擇攻擊目標全域遮罩（fixed，不受 overflow-hidden 影響） ── */}
+              {pendingCard && myRole !== 'host' && (
+                <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center p-6 animate-fade-in"
+                  style={{ background: 'rgba(10,15,35,0.97)' }}>
+                  <div className="w-full max-w-xs">
+                    <p className="text-slate-400 text-sm text-center mb-2">⚡ 準備發動技能</p>
+                    <div className="rounded-2xl p-4 text-center mb-5"
+                      style={{ background: 'rgba(234,179,8,0.15)', border: '2px solid rgba(234,179,8,0.7)' }}>
+                      <p className="text-yellow-300 font-black text-lg">【{pendingCard.name}】</p>
+                      <p className="text-slate-300 text-xs mt-1 leading-relaxed">{pendingCard.desc}</p>
+                    </div>
+                    <p className="text-rose-300 text-sm font-black text-center mb-3">⚔️ 選擇攻擊目標</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.values(roomData.teams)
+                        .filter(t => t.joined && t.id !== myRole && (roomData.scores?.[t.id] ?? 100) > 0)
+                        .map(t => (
+                          <button key={t.id} onClick={() => playCard(pendingCard, t.id)}
+                            className={`py-5 rounded-2xl text-white font-black active:scale-95 transition shadow-lg ${t.yuan?.color}`}>
+                            <span className="block text-base">{t.yuan?.name}</span>
+                            <span className="block text-xs font-normal mt-0.5 opacity-80">{roomData.scores?.[t.id] ?? 0} 分</span>
+                          </button>
+                        ))}
+                    </div>
+                    <button onClick={() => setPendingCard(null)}
+                      className="mt-4 w-full text-slate-400 text-sm py-3 rounded-xl border border-slate-700 active:opacity-70">
+                      取消
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* 老師斷線時 useEffect 會自動把 state 改成 end，不需要 banner */}
               <header className="bg-slate-800 border-b border-slate-700 shadow-md">
