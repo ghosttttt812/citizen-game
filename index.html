@@ -271,7 +271,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-22';
+        const BUILD = '20260517-23';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -805,7 +805,7 @@
                 buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
                 cardOverlay: null,
                 // 突發事件：在 qIndex 3~7 結束後隨機觸發一次
-                surpriseAfter: 3 + Math.floor(Math.random() * 5),
+                surpriseAfter: 3 + Math.floor(Math.random() * 8),  // qIndex 3..10 → 落在 Q4~Q12 之間
                 surpriseTriggered: false,
                 surpriseEvent: null,
                 heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
@@ -1124,7 +1124,7 @@
               newStatus[k].shielded = false;
             });
 
-            // 觸發突發事件：在第 4~8 題（qIndex 3~7）其中一題結束後突然插入
+            // 觸發突發事件：第 4~12 題之間隨機（qIndex 3~10 結束後插入）
             const shouldTriggerSurprise = !roomData.surpriseTriggered
               && typeof roomData.surpriseAfter === 'number'
               && roomData.qIndex === roomData.surpriseAfter;
@@ -1238,7 +1238,7 @@
               qIndex: 0, buzzerWinner: null,
               buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
               cardOverlay: null,
-              surpriseAfter: 3 + Math.floor(Math.random() * 5),
+              surpriseAfter: 3 + Math.floor(Math.random() * 8),  // qIndex 3..10 → 落在 Q4~Q12 之間
               surpriseTriggered: false,
               surpriseEvent: null,
               heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
@@ -1718,7 +1718,7 @@
 
                 {/* Banner */}
                 <div className="surprise-banner shrink-0 bg-rose-600 text-white text-center py-4 px-3 shadow-md">
-                  <h1 className="text-2xl sm:text-3xl font-black">{resolved ? '🎯 結算' : '🚨 突發事件！'}</h1>
+                  <h1 className="text-2xl sm:text-3xl font-black">{resolved ? '🎯 結算' : '🚨 突發事件！要來選院長囉！'}</h1>
                   <p className="text-xs sm:text-sm opacity-90 mt-1">全員作答 · 答對 +{SURPRISE_POINTS} 分 · 答錯 -{WRONG_PENALTY} 分</p>
                 </div>
 
