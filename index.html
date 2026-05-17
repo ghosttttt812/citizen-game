@@ -213,8 +213,13 @@
     <!-- ── 背景音樂控制器 ──────────────────────────────────── -->
     <script>
       const bgm = (() => {
-        const lobby = new Audio('Last Cappuccino in Rio - Chris Haugen.mp3');
-        const game  = new Audio('Helios - Jeremy Black.mp3');
+        // 用 encodeURI 處理空白與特殊字元；附 error / canplaythrough log 方便偵錯
+        const lobby = new Audio(encodeURI('Last Cappuccino in Rio - Chris Haugen.mp3'));
+        const game  = new Audio(encodeURI('Helios - Jeremy Black.mp3'));
+        lobby.preload = 'auto';  game.preload = 'auto';
+        // 若主要檔案失敗 fallback 回原本檔
+        lobby.addEventListener('error', () => { lobby.src = 'bgm_lobby.mp3'; });
+        game.addEventListener('error',  () => { game.src  = 'bgm_game.mp3'; });
         lobby.loop = true;  lobby.volume = 0.35;
         game.loop  = true;  game.volume  = 0.40;
 
@@ -264,7 +269,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-17';
+        const BUILD = '20260517-18';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -378,24 +383,30 @@
         const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
 
         // ── 突發事件題庫（隨機從五院挑一題：誰是該院院長）
-        // 第一個選項為正確答案（執行時會隨機洗牌）；老師可直接編輯姓名
+        // 第一個選項為正確答案（執行時會隨機洗牌）；老師可直接編輯姓名與圖檔路徑
+        // 圖片放在 images/ 資料夾，若檔案不存在會自動 fallback 顯示 emoji
         const SURPRISE_EVENTS = [
-          { yuan:'行政院', text:'誰是現任行政院院長？',
+          { yuanId:'executive',   yuan:'行政院', img:'images/yuan_executive.jpg',   emoji:'🏛️',
+            text:'誰是現任行政院院長？',
             options:['卓榮泰', '蘇貞昌', '陳建仁', '賴清德'], answer:0 },
-          { yuan:'立法院', text:'誰是現任立法院院長？',
+          { yuanId:'legislative', yuan:'立法院', img:'images/yuan_legislative.jpg', emoji:'🏢',
+            text:'誰是現任立法院院長？',
             options:['韓國瑜', '游錫堃', '王金平', '蘇嘉全'], answer:0 },
-          { yuan:'司法院', text:'誰是現任司法院院長？',
+          { yuanId:'judicial',    yuan:'司法院', img:'images/yuan_judicial.jpg',    emoji:'⚖️',
+            text:'誰是現任司法院院長？',
             options:['許宗力', '賴英照', '翁岳生', '賴浩敏'], answer:0 },
-          { yuan:'監察院', text:'誰是現任監察院院長？',
+          { yuanId:'control',     yuan:'監察院', img:'images/yuan_control.jpg',     emoji:'🔍',
+            text:'誰是現任監察院院長？',
             options:['陳菊', '張博雅', '王建煊', '錢復'], answer:0 },
-          { yuan:'考試院', text:'誰是現任考試院院長？',
+          { yuanId:'examination', yuan:'考試院', img:'images/yuan_examination.jpg', emoji:'📚',
+            text:'誰是現任考試院院長？',
             options:['黃榮村', '伍錦霖', '關中', '姚嘉文'], answer:0 },
         ];
         const buildSurpriseEvent = () => {
           const t = SURPRISE_EVENTS[Math.floor(Math.random() * SURPRISE_EVENTS.length)];
           const correctOption = t.options[t.answer];
           const shuffled = shuffle(t.options);
-          return { yuan:t.yuan, text:t.text, options:shuffled, answer:shuffled.indexOf(correctOption) };
+          return { yuanId:t.yuanId, yuan:t.yuan, img:t.img, emoji:t.emoji, text:t.text, options:shuffled, answer:shuffled.indexOf(correctOption) };
         };
 
         const CORRECT_POINTS = 40;      // 答對得分
@@ -426,6 +437,19 @@
           const [flippedCards, setFlippedCards] = useState({});
           const [feedbackOverlay, setFeedbackOverlay] = useState(null);
           const [surpriseTimeLeft, setSurpriseTimeLeft] = useState(null);
+          const feedbackTimer = useRef(null);
+          const surpriseResolving = useRef(false);
+          const prevSurpriseResolvedAt = useRef(null);
+
+          // 模組化：統一顯示「答對 / 答錯」通知（正常題 & 突發事件共用）
+          const showAnswerFeedback = (type, yuanName, yuanText, points, duration) => {
+            if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+            setFeedbackOverlay({ type, yuan: yuanName, yuanText, points });
+            feedbackTimer.current = setTimeout(() => {
+              setFeedbackOverlay(null);
+              feedbackTimer.current = null;
+            }, duration || (type === 'correct' ? 1400 : 1300));
+          };
 
           const prevBuzzerWinner = useRef(null);
           const prevState = useRef(null);
@@ -540,45 +564,50 @@
             handleTimeout();
           }, [answerTimeLeft]);
 
-          // 音效 + 答對/答錯動畫：根據狀態變化觸發
+          // 音效 + 答對/答錯動畫：正常題目用
           useEffect(() => {
             if (!roomData) return;
             if (roomData.buzzerWinner && roomData.buzzerWinner !== prevBuzzerWinner.current) sound.buzz();
             prevBuzzerWinner.current = roomData.buzzerWinner;
 
-            // 答對
+            // 答對（正常題）
             if (roomData.lastRoundWinner && roomData.lastRoundWinner !== prevLastRoundWinner.current) {
               sound.correct();
               const team = roomData.teams[roomData.lastRoundWinner];
-              setFeedbackOverlay({
-                type: 'correct',
-                yuan: team?.yuan?.name,
-                yuanText: team?.yuan?.text,
-                points: roomData.lastRoundPoints || CORRECT_POINTS,
-              });
-              setTimeout(() => setFeedbackOverlay(null), 1400);
+              showAnswerFeedback('correct', team?.yuan?.name, team?.yuan?.text, roomData.lastRoundPoints || CORRECT_POINTS);
             }
             prevLastRoundWinner.current = roomData.lastRoundWinner;
 
             if (roomData.state === 'end' && prevState.current !== 'end') sound.victory();
             prevState.current = roomData.state;
 
-            // 答錯
+            // 答錯（正常題）
             const currWrongLen = (roomData.wrongAnswerers || []).length;
             if (currWrongLen > prevWrongLen.current) {
               sound.wrong();
               const lastWrongId = roomData.wrongAnswerers[currWrongLen - 1];
               const team = roomData.teams[lastWrongId];
-              setFeedbackOverlay({
-                type: 'wrong',
-                yuan: team?.yuan?.name,
-                yuanText: team?.yuan?.text,
-                points: -WRONG_PENALTY,
-              });
-              setTimeout(() => setFeedbackOverlay(null), 1300);
+              showAnswerFeedback('wrong', team?.yuan?.name, team?.yuan?.text, -WRONG_PENALTY);
             }
             prevWrongLen.current = currWrongLen;
           }, [roomData]);
+
+          // 突發事件結算後，每個學生看到自己組別的答對/答錯通知
+          useEffect(() => {
+            const ev = roomData?.surpriseEvent;
+            if (!ev?.resolved || !ev.results || myRole === 'host') return;
+            if (ev.resolvedAt === prevSurpriseResolvedAt.current) return;
+            prevSurpriseResolvedAt.current = ev.resolvedAt;
+            const myResult = ev.results.find(r => r.yuanId === myRole);
+            if (!myResult) return;
+            if (myResult.resultType === 'correct') {
+              sound.correct();
+              showAnswerFeedback('correct', myResult.yuan, myResult.yuanText, SURPRISE_POINTS);
+            } else if (myResult.resultType === 'wrong') {
+              sound.wrong();
+              showAnswerFeedback('wrong', myResult.yuan, myResult.yuanText, -WRONG_PENALTY);
+            }
+          }, [roomData?.surpriseEvent?.resolved, roomData?.surpriseEvent?.resolvedAt, myRole]);
 
           // BGM：依遊戲狀態切換
           useEffect(() => {
@@ -630,12 +659,17 @@
             return () => clearInterval(iv);
           }, [roomData?.surpriseEvent?.deadline, roomData?.state]);
 
-          // 突發事件結算（host 監看：全員答完或時間到）
+          // 突發事件結算（host 監看：全員答完或時間到，結算後 3.5 秒進下一題）
           useEffect(() => {
             if (roomData?.state !== 'surprise' || !roomData?.surpriseEvent || myRole !== 'host') return;
             const check = () => {
               const ev = roomData.surpriseEvent;
               if (!ev) return;
+              if (ev.resolved) {
+                // 已結算，等 3.5s 後推進
+                if (Date.now() > (ev.resolvedAt || 0) + 3500) advancePastSurprise();
+                return;
+              }
               const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
               const answered = Object.keys(ev.answers || {});
               const allDone = joinedIds.length > 0 && joinedIds.every(id => answered.includes(id));
@@ -643,7 +677,7 @@
               if (allDone || expired) resolveSurpriseEvent();
             };
             check();
-            const iv = setInterval(check, 600);
+            const iv = setInterval(check, 500);
             return () => clearInterval(iv);
           }, [roomData?.state, roomData?.surpriseEvent, myRole]);
 
@@ -999,34 +1033,57 @@
             roomRef().update({ [`surpriseEvent.answers.${myRole}`]: idx }).catch(() => {});
           };
 
-          // 結算突發事件（由 host 端在「全員答完」或「時間到」時觸發）
+          // 結算突發事件：先寫入 resolved + results 讓所有人看到通知，3.5 秒後再進下一題
           const resolveSurpriseEvent = () => {
             if (!roomData?.surpriseEvent || myRole !== 'host') return;
+            if (roomData.surpriseEvent.resolved || surpriseResolving.current) return;
+            surpriseResolving.current = true;
             const ev = roomData.surpriseEvent;
             const newScores = { ...roomData.scores };
+            const results = [];
+            const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
             const correctNames = [], wrongNames = [];
-            Object.entries(ev.answers || {}).forEach(([gid, idx]) => {
-              if (idx === ev.answer) {
+            joinedIds.forEach(gid => {
+              const idx = ev.answers?.[gid];
+              const team = roomData.teams[gid];
+              if (idx === undefined) {
+                results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'skipped', points:0 });
+              } else if (idx === ev.answer) {
                 newScores[gid] = (newScores[gid] || 0) + SURPRISE_POINTS;
-                correctNames.push(roomData.teams[gid]?.yuan?.name);
+                results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'correct', points:SURPRISE_POINTS });
+                correctNames.push(team?.yuan?.name);
               } else {
                 newScores[gid] = Math.max(0, (newScores[gid] || 0) - WRONG_PENALTY);
-                wrongNames.push(roomData.teams[gid]?.yuan?.name);
+                results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'wrong', points:-WRONG_PENALTY });
+                wrongNames.push(team?.yuan?.name);
               }
             });
+            roomRef().update({
+              scores: newScores,
+              surpriseEvent: { ...ev, resolved: true, results, resolvedAt: Date.now() },
+              actionLog: [
+                `🎯 突發事件結算：答對 +${SURPRISE_POINTS}${correctNames.length ? ` (${correctNames.join('、')})` : ''}${wrongNames.length ? ` / 答錯 -${WRONG_PENALTY} (${wrongNames.join('、')})` : ''}`,
+                ...roomData.actionLog
+              ].slice(0, 5),
+            }).then(() => {
+              // 鎖在 ref 1 秒避免 polling 重入
+              setTimeout(() => { surpriseResolving.current = false; }, 1000);
+            }).catch(() => { surpriseResolving.current = false; });
+          };
+
+          // 結算完 3.5 秒後推進到下一題（host 觸發、用 captured 值避免 stale state）
+          const advancePastSurprise = () => {
+            if (!roomData || myRole !== 'host') return;
+            const ev = roomData.surpriseEvent;
+            if (!ev?.resolved) return;
             const nextIdx = roomData.qIndex + 1;
             const hasMore = nextIdx < (roomData.questions || []).length;
             roomRef().update({
-              scores: newScores,
               state: hasMore ? 'playing' : 'end',
               qIndex: hasMore ? nextIdx : roomData.qIndex,
               buzzerOpenAt: hasMore ? Date.now() + BUZZ_DELAY_NEW_Q * 1000 : 0,
               buzzerWinner: null, answerDeadline: null, wrongAnswerers: [],
               surpriseEvent: null, cardOverlay: null,
-              actionLog: [
-                `🎯 突發事件結算：答對 +${SURPRISE_POINTS}${correctNames.length ? ` (${correctNames.join('、')})` : ''}${wrongNames.length ? ` / 答錯 -${WRONG_PENALTY} (${wrongNames.join('、')})` : ''}`,
-                ...roomData.actionLog
-              ].slice(0, 5),
             });
           };
 
@@ -1511,6 +1568,7 @@
             const yuanInfo = YUAN_DB.find(y => y.name === ev.yuan);
             const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
             const answeredCount = Object.keys(ev.answers || {}).length;
+            const resolved = !!ev.resolved;
             return (
               <div className="h-full flex flex-col overflow-hidden" style={{ background:'rgba(252,232,232,0.96)' }}>
                 <ErrorModal />
@@ -1528,27 +1586,60 @@
 
                 {/* Banner */}
                 <div className="surprise-banner shrink-0 bg-rose-600 text-white text-center py-4 px-3 shadow-md">
-                  <h1 className="text-2xl sm:text-3xl font-black">🚨 突發事件！</h1>
+                  <h1 className="text-2xl sm:text-3xl font-black">{resolved ? '🎯 結算' : '🚨 突發事件！'}</h1>
                   <p className="text-xs sm:text-sm opacity-90 mt-1">全員作答 · 答對 +{SURPRISE_POINTS} 分 · 答錯 -{WRONG_PENALTY} 分</p>
                 </div>
 
                 <main className="flex-1 flex flex-col p-4 gap-3 overflow-auto" style={{ WebkitOverflowScrolling:'touch' }}>
-                  {/* 題目 */}
+                  {/* 題目（含圖片） */}
                   <div className="app-card-3 rounded-2xl p-5 border-2 border-rose-300 text-center app-shadow">
                     <p className={`text-xs font-black mb-2 ${yuanInfo?.text || 'app-accent-text'}`}>關於 {ev.yuan}</p>
+                    {/* 圖片：載入失敗自動 fallback 到 emoji（避免黑 box） */}
+                    {ev.img ? (
+                      <img src={ev.img} alt={ev.yuan}
+                        className="rounded-2xl mx-auto mb-3 max-h-44 object-contain border app-border bg-white"
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          if (!el.dataset.fellback) {
+                            el.dataset.fellback = '1';
+                            el.style.display = 'none';
+                            const next = el.nextSibling;
+                            if (next) next.style.display = 'block';
+                          }
+                        }} />
+                    ) : null}
+                    <div className="text-7xl mb-3" style={{ display: ev.img ? 'none' : 'block' }}>{ev.emoji || '🏛️'}</div>
                     <h2 className="text-xl sm:text-2xl font-black app-text leading-relaxed">{ev.text}</h2>
                   </div>
 
-                  {/* 倒數 */}
+                  {/* 倒數 / 結算狀態 */}
                   <div className="flex items-center justify-between px-2">
-                    <span className="text-xs app-text-2">已作答 {answeredCount} / {joinedIds.length}</span>
-                    {surpriseTimeLeft !== null && (
+                    <span className="text-xs app-text-2">{resolved ? '結算中…' : `已作答 ${answeredCount} / ${joinedIds.length}`}</span>
+                    {!resolved && surpriseTimeLeft !== null && (
                       <span className={`text-2xl font-black ${surpriseTimeLeft <= 5 ? 'text-rose-700 animate-pulse' : 'app-text'}`}>⏱ {surpriseTimeLeft}s</span>
                     )}
                   </div>
 
-                  {/* 選項 */}
-                  {myRole === 'host' ? (
+                  {/* 結算後：顯示全員結果列表 */}
+                  {resolved ? (
+                    <div className="grid grid-cols-1 gap-2">
+                      <p className="text-center text-sm font-bold app-text-2 mb-1">正解：<span className="app-accent-text">{ev.options[ev.answer]}</span></p>
+                      {(ev.results || []).map((r) => (
+                        <div key={r.yuanId} className={`flex items-center justify-between px-4 py-3 rounded-xl border-2
+                          ${r.resultType === 'correct' ? 'bg-emerald-50 border-emerald-300'
+                            : r.resultType === 'wrong' ? 'bg-rose-50 border-rose-300'
+                            : 'app-card-2 app-border'}`}>
+                          <span className={`font-black ${r.yuanText || 'app-text'}`}>{r.yuan}</span>
+                          <span className={`font-black text-sm ${r.resultType === 'correct' ? 'text-emerald-700' : r.resultType === 'wrong' ? 'text-rose-700' : 'app-text-3'}`}>
+                            {r.resultType === 'correct' ? `✅ +${SURPRISE_POINTS}`
+                              : r.resultType === 'wrong' ? `❌ -${WRONG_PENALTY}`
+                              : '— 未作答'}
+                          </span>
+                        </div>
+                      ))}
+                      <p className="text-center text-xs app-text-3 mt-2">3 秒後繼續下一題…</p>
+                    </div>
+                  ) : myRole === 'host' ? (
                     <div className="app-card-2 rounded-2xl p-6 text-center">
                       <p className="app-text-2 font-bold">老師端：等待學生作答</p>
                       <p className="app-text-3 text-xs mt-2">作答完畢或時間到後自動結算</p>
