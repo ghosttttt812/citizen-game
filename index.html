@@ -18,6 +18,12 @@
         .animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .animate-buzz-open { animation: pulse2 0.4s ease-out; }
         .yuan-bar { height: 100%; transition: width 0.8s ease-in-out; }
+        /* 卡片翻轉動畫 */
+        .flip-card { perspective: 900px; }
+        .flip-inner { position: relative; transform-style: preserve-3d; transition: transform 0.55s cubic-bezier(0.4,0.2,0.2,1); }
+        .flip-inner.is-flipped { transform: rotateY(180deg); }
+        .flip-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 1rem; overflow: hidden; padding: 1rem; }
+        .flip-back-face { transform: rotateY(180deg); }
         @media (max-width: 640px) {
             .mobile-btn { padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 1.25rem; }
             .mobile-q-text { font-size: 1.5rem; line-height: 2rem; }
@@ -162,7 +168,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-09';
+        const BUILD = '20260517-10';
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -195,6 +201,15 @@
           { id: 'c10', name: '特別預算',   desc: '全場各加 10 分；本組另外再抽 1 張共同卡',                   type: 'all-bonus'     },
         ];
 
+        // 院專屬卡使用技巧（規則 modal 用）
+        const YUAN_CARD_TIPS = {
+          executive:   '最佳時機：被攻擊的瞬間立刻打出，才能觸發傷害反彈！平時保留作護盾。',
+          legislative: '最佳時機：對手分數大幅領先時出手，一舉削弱最強競爭者。',
+          judicial:    '最佳時機：對手剛答對後立刻發動，直接撤銷剛獲得的分數。',
+          examination: '最佳時機：自己分數領先時使用，免疫攻擊又讓其他院付出代價。',
+          control:     '最佳時機：攻擊手中持有強力共同卡的對手，摧毀對手的手牌優勢。',
+        };
+
         // QUESTION_BANK 來自外部 questions.js
 
         const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
@@ -217,9 +232,12 @@
           const [timeToOpen, setTimeToOpen] = useState(null);       // 搶答開放倒數
           const [answerTimeLeft, setAnswerTimeLeft] = useState(null); // 答題剩餘秒數
           const [showScoreboard, setShowScoreboard] = useState(false);
-          const [pendingCard, setPendingCard] = useState(null);   // 待選目標的技能卡
-          const [pendingGroup, setPendingGroup] = useState(null); // 選院確認流程
+          const [pendingCard, setPendingCard] = useState(null);
+          const [pendingGroup, setPendingGroup] = useState(null);
           const [cardRevealed, setCardRevealed] = useState(false);
+          const [showRules, setShowRules] = useState(false);
+          const [rulesTab, setRulesTab] = useState(0);
+          const [flippedCards, setFlippedCards] = useState({});
 
           const prevBuzzerWinner = useRef(null);
           const prevState = useRef(null);
@@ -559,7 +577,9 @@
           const applyWrongAnswer = (yuanName, reason) => {
             const newScores = { ...roomData.scores, [myRole]: Math.max(0, (roomData.scores[myRole] || 0) - WRONG_PENALTY) };
             const newWrong = [...(roomData.wrongAnswerers || []), myRole];
-            const remaining = Object.keys(newScores).filter(k => newScores[k] > 0 && !newWrong.includes(k));
+            // 只考慮已加入的組別，避免未加入組別卡住流程
+            const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
+            const remaining = joinedIds.filter(k => newScores[k] > 0 && !newWrong.includes(k));
 
             if (remaining.length === 0) {
               roomRef().update({
@@ -689,9 +709,10 @@
           };
 
           const nextQ = () => {
+            if (!roomData || roomData.state !== 'playing') return; // 防止重複或錯誤觸發
             const newStatus = JSON.parse(JSON.stringify(roomData.statusEffects || {}));
             Object.keys(newStatus).forEach(k => { newStatus[k].cardBanned = false; });
-            const updates = roomData.qIndex + 1 < roomData.questions.length
+            const updates = roomData.qIndex + 1 < (roomData.questions || []).length
               ? {
                   qIndex: roomData.qIndex + 1,
                   buzzerWinner: null, state: 'playing',
@@ -733,12 +754,12 @@
             const myScore = roomData.scores?.[myRole] ?? 0;
             const alreadyWrong = (roomData.wrongAnswerers || []).includes(myRole);
             const myHand = roomData.hands?.[myRole] || [];
-            // 本回合已發動過一張（同回合限一張）
-            const alreadyPlayedThisRound = myHand.some(c => c.usedOnQ === roomData.qIndex);
             const cardBanned = roomData.statusEffects?.[myRole]?.cardBanned;
-            // 可顯示的卡（未被永久棄置）
-            const visibleCards = myHand.filter(c => c.usedOnQ !== -1);
+            // 整局只能用一次：usedOnQ !== null 表示永久已使用（含本回合）
+            const alreadyPlayedThisRound = myHand.some(c => c.usedOnQ === roomData.qIndex);
             const needsTarget = (card) => ['target','steal-exclusive','steal-common','card-ban','alliance','rotate'].includes(card.type);
+            // 顯示所有卡（除被彈劾棄置的）
+            const visibleCards = myHand.filter(c => c.usedOnQ !== -1);
 
             if (myScore <= 0) return (
               <div className="mt-4 py-6 rounded-3xl font-black text-2xl bg-slate-700 text-slate-500 text-center">已淘汰</div>
@@ -748,30 +769,34 @@
                 已答題，等待其他組搶答
               </div>
             );
+
             if (timeToOpen > 0) return (
-              <div className="mt-3 flex flex-col gap-2">
-                <div className="py-3 rounded-2xl bg-slate-700 text-center">
+              <div className="mt-2 space-y-2">
+                {/* 倒數 */}
+                <div className="py-2 rounded-2xl bg-slate-700 text-center">
                   <p className="text-slate-400 text-xs font-bold">搶答倒數</p>
-                  <p className="text-5xl font-black text-white animate-bounce">{timeToOpen}</p>
+                  <p className="text-4xl font-black text-white animate-bounce">{timeToOpen}</p>
                 </div>
 
-                {/* ── 技能卡區（永遠顯示，本回合用過的灰掉）── */}
+                {/* 技能卡面板（倒數時顯示完整說明） */}
                 {visibleCards.length > 0 && (
-                  <div className="bg-slate-800/80 border border-yellow-500/40 rounded-2xl p-3">
-                    {cardBanned ? (
-                      <p className="text-center text-xs text-rose-400 font-bold">🚫 本回合被輿論炎上，無法發動技能</p>
-                    ) : alreadyPlayedThisRound ? (
-                      <p className="text-[10px] text-slate-500 font-bold mb-2">⚡ 本回合已發動一張（下題可再發動）</p>
-                    ) : (
-                      <p className="text-[10px] text-yellow-400 font-bold mb-2">⚡ 倒數期間可發動一張技能卡（每回合限一張）</p>
-                    )}
+                  <div className="rounded-2xl overflow-hidden border border-yellow-500/30 bg-slate-900/95">
+                    <div className="px-3 py-2 border-b border-yellow-500/20">
+                      {cardBanned ? (
+                        <p className="text-rose-400 text-[10px] font-bold">🚫 被輿論炎上，本題無法發動技能</p>
+                      ) : alreadyPlayedThisRound ? (
+                        <p className="text-slate-500 text-[10px] font-bold">✅ 本題已發動技能卡</p>
+                      ) : (
+                        <p className="text-yellow-400 text-[10px] font-bold">⚡ 搶答前可發動一張技能卡（每張卡整局限用一次）</p>
+                      )}
+                    </div>
 
                     {pendingCard ? (
-                      <div>
-                        <p className="text-xs text-rose-300 font-bold mb-2">選擇攻擊目標：</p>
+                      <div className="p-2.5">
+                        <p className="text-rose-300 text-xs font-bold mb-2">選擇攻擊目標：</p>
                         <div className="grid grid-cols-2 gap-1.5">
                           {Object.values(roomData.teams)
-                            .filter(t => t.id !== myRole && (roomData.scores?.[t.id] ?? 100) > 0)
+                            .filter(t => t.joined && t.id !== myRole && (roomData.scores?.[t.id] ?? 100) > 0)
                             .map(t => (
                               <button key={t.id} onClick={() => playCard(pendingCard, t.id)}
                                 className={`p-2 rounded-xl text-white font-black text-xs active:scale-95 transition ${t.yuan?.color}`}>
@@ -779,24 +804,39 @@
                               </button>
                             ))}
                         </div>
-                        <button onClick={() => setPendingCard(null)} className="mt-2 w-full text-slate-400 text-xs">取消</button>
+                        <button onClick={() => setPendingCard(null)} className="mt-2 w-full text-slate-500 text-xs py-1">取消</button>
                       </div>
                     ) : (
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="p-2 space-y-1.5">
                         {visibleCards.map(card => {
-                          const usedThisRound = card.usedOnQ === roomData.qIndex;
-                          const blocked = cardBanned || alreadyPlayedThisRound || usedThisRound;
+                          const permanentlyUsed = card.usedOnQ !== null; // 整局已使用
+                          const canActivate = !cardBanned && !alreadyPlayedThisRound && !permanentlyUsed;
                           return (
                             <button key={card.uniqueId}
-                              onClick={() => { if (blocked) return; needsTarget(card) ? setPendingCard(card) : playCard(card); }}
-                              className={`text-xs px-2 py-1.5 rounded-lg font-bold transition border
-                                ${blocked
-                                  ? 'opacity-40 bg-slate-700 border-slate-600 text-slate-500 cursor-not-allowed'
-                                  : card.isExclusive
-                                    ? 'bg-yellow-500/20 border-yellow-500/60 text-yellow-300 active:scale-95'
-                                    : 'bg-slate-600/80 border-slate-500 text-white active:scale-95'}`}>
-                              <span className="block">{card.name}</span>
-                              {usedThisRound && <span className="block text-[9px] text-slate-500 font-normal">本回合已用</span>}
+                              onClick={() => { if (!canActivate) return; needsTarget(card) ? setPendingCard(card) : playCard(card); }}
+                              className="w-full flex items-start gap-2 rounded-xl text-left transition"
+                              style={{
+                                padding: '0.5rem 0.625rem',
+                                opacity: canActivate ? 1 : 0.45,
+                                cursor: canActivate ? 'pointer' : 'not-allowed',
+                                background: permanentlyUsed ? 'rgba(30,32,45,0.7)'
+                                  : card.isExclusive ? 'rgba(234,179,8,0.13)' : 'rgba(60,70,100,0.6)',
+                                border: `1px solid ${permanentlyUsed ? '#1e2035' : card.isExclusive ? 'rgba(234,179,8,0.4)' : '#3f4d6e'}`,
+                              }}>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-black leading-tight ${permanentlyUsed ? 'line-through text-slate-600' : card.isExclusive ? 'text-yellow-300' : 'text-white'}`}>
+                                  {card.isExclusive ? '⭐' : '🃏'} {card.name}
+                                  {permanentlyUsed && <span className="ml-1 text-[9px] font-normal no-underline text-rose-700"> 已使用</span>}
+                                </p>
+                                {!permanentlyUsed && (
+                                  <p className="text-[9px] text-slate-400 leading-snug mt-0.5" style={{ display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+                                    {card.desc}
+                                  </p>
+                                )}
+                              </div>
+                              {canActivate && (
+                                <span className="shrink-0 text-[10px] font-black text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded self-center">發動</span>
+                              )}
                             </button>
                           );
                         })}
@@ -806,6 +846,7 @@
                 )}
               </div>
             );
+
             // 搶答開放
             return (
               <button onClick={handleBuzz}
@@ -814,6 +855,119 @@
               </button>
             );
           };
+
+          // ── 規則說明 Modal ──────────────────────────────────────
+          if (showRules) {
+            const yuanOrder = ['executive','legislative','judicial','examination','control'];
+            return (
+              <div className="h-full flex flex-col bg-slate-950 text-white overflow-hidden">
+                {/* 頂欄 + 分頁 */}
+                <div className="shrink-0 border-b border-slate-800">
+                  <div className="flex items-center gap-3 px-4 pt-4 pb-2">
+                    <button onClick={() => setShowRules(false)}
+                      className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 text-slate-300 font-black text-lg active:scale-95 transition">✕</button>
+                    <h2 className="text-white font-black text-base flex-1">遊戲說明 &amp; 技能卡</h2>
+                  </div>
+                  <div className="flex px-2">
+                    {['📋 遊戲規則','⭐ 院專屬卡','🃏 共同卡牌'].map((label,i) => (
+                      <button key={i} onClick={() => setRulesTab(i)}
+                        className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition ${rulesTab===i ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-slate-500 active:text-slate-300'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 內容 */}
+                <div className="flex-1 overflow-auto p-4">
+                  {/* ── Tab 0: 遊戲規則 ── */}
+                  {rulesTab === 0 && (
+                    <div className="space-y-3 max-w-sm mx-auto">
+                      {[
+                        { icon:'🏛️', title:'選擇陣營', body:'每組選一個院，獲得該院的專屬技能卡，並從共同卡牌堆中隨機抽取一張。抽完共同卡後即確認陣營，無法重選。' },
+                        { icon:'⚡', title:'搶答得分', body:'答對 +40 分，答錯 -15 分。分數歸零後即淘汰，無法繼續搶答。每題有 5 秒倒數，倒數結束才能搶答。' },
+                        { icon:'🃏', title:'技能卡規則', body:'每張技能卡整局只能使用一次，用完就永久消失。每次搶答倒數期間最多發動一張技能卡，按下搶答後不能再發動技能。' },
+                      ].map(r => (
+                        <div key={r.title} className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                          <h3 className="text-yellow-400 font-black mb-2">{r.icon} {r.title}</h3>
+                          <p className="text-slate-300 text-sm leading-relaxed">{r.body}</p>
+                        </div>
+                      ))}
+                      <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50 text-center">
+                        <p className="text-slate-400 text-xs">如果被攻擊者有護盾（民意支持）或行政院反彈效果，攻擊可能無效甚至傷到自己，要小心！</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Tab 1: 院專屬卡 ── */}
+                  {rulesTab === 1 && (
+                    <div className="space-y-3 max-w-sm mx-auto">
+                      <p className="text-slate-500 text-xs text-center">點擊卡片可查看使用技巧</p>
+                      {yuanOrder.map(key => {
+                        const card = YUAN_EXCLUSIVE_CARDS[key];
+                        const yuan = YUAN_DB.find(y => y.id === key);
+                        const flipped = !!flippedCards[key];
+                        return (
+                          <div key={key} className="flip-card" style={{ height:'170px' }}
+                            onClick={() => { sound.draw(); setFlippedCards(p => ({...p, [key]: !p[key]})); }}>
+                            <div className={`flip-inner${flipped ? ' is-flipped' : ''}`} style={{ height:'170px' }}>
+                              {/* 正面 */}
+                              <div className="flip-face flex flex-col justify-between"
+                                style={{ background:'rgba(22,30,50,0.95)', border:'2px solid rgba(234,179,8,0.45)' }}>
+                                <div>
+                                  <div className="flex items-start justify-between mb-1.5">
+                                    <div>
+                                      <p className={`text-[10px] font-bold ${yuan?.text}`}>{yuan?.name}</p>
+                                      <p className="text-white font-black text-base">【{card.name}】</p>
+                                    </div>
+                                    <span className="text-[9px] text-yellow-600 border border-yellow-800 bg-yellow-900/30 px-1.5 py-0.5 rounded shrink-0">院專屬</span>
+                                  </div>
+                                  <p className="text-slate-300 text-[11px] leading-relaxed">{card.desc}</p>
+                                </div>
+                                <p className="text-slate-600 text-[9px]">點擊查看使用技巧 →</p>
+                              </div>
+                              {/* 背面 */}
+                              <div className="flip-face flip-back-face flex flex-col justify-between"
+                                style={{ background:'rgba(15,20,45,0.98)', border:'2px solid rgba(99,102,241,0.55)' }}>
+                                <div>
+                                  <p className="text-indigo-400 text-[10px] font-black mb-2">💡 使用技巧</p>
+                                  <p className="text-white text-sm leading-relaxed">{YUAN_CARD_TIPS[key]}</p>
+                                </div>
+                                <p className="text-slate-600 text-[9px]">← 點擊返回</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* ── Tab 2: 共同卡牌 ── */}
+                  {rulesTab === 2 && (
+                    <div className="space-y-2 max-w-sm mx-auto">
+                      {[
+                        { label:'增益與逆轉', ids:['c01','c02','c03'], color:'text-emerald-400', bg:'bg-emerald-900/20', border:'border-emerald-800/50' },
+                        { label:'竊取與干擾', ids:['c04','c05','c06'], color:'text-rose-400', bg:'bg-rose-900/20', border:'border-rose-800/50' },
+                        { label:'防禦與互助', ids:['c07','c08'], color:'text-blue-400', bg:'bg-blue-900/20', border:'border-blue-800/50' },
+                        { label:'全場變動', ids:['c09','c10'], color:'text-amber-400', bg:'bg-amber-900/20', border:'border-amber-800/50' },
+                      ].map(cat => (
+                        <div key={cat.label}>
+                          <p className={`text-[10px] font-black mb-1.5 mt-2 ${cat.color}`}>▸ {cat.label}</p>
+                          {COMMON_CARD_POOL.filter(c => cat.ids.includes(c.id)).map((card, i) => (
+                            <div key={card.id} className={`rounded-xl p-3 border mb-1.5 animate-fade-in ${cat.bg} ${cat.border}`}
+                              style={{ animationDelay:`${i*60}ms` }}>
+                              <p className="text-white font-black text-sm mb-0.5">🃏 {card.name}</p>
+                              <p className="text-slate-300 text-[11px] leading-relaxed">{card.desc}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
 
           // ── 畫面分支 ──────────────────────────────────────────
 
@@ -830,9 +984,10 @@
                 <input value={joinInput} onChange={e => setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="輸入 4 碼代碼" className="w-full bg-slate-900 p-5 rounded-2xl text-center text-2xl font-bold border-2 border-slate-600 focus:border-blue-500 outline-none" />
                 <button onClick={joinRoom} disabled={joinInput.length !== 4} className="w-full bg-blue-500 disabled:bg-slate-600 disabled:text-slate-400 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">加入遊戲 (學生)</button>
               </div>
-              <a href="rules.html" className="text-slate-400 text-sm font-bold underline underline-offset-4 active:opacity-70">
+              <button onClick={() => { setShowRules(true); setRulesTab(0); }}
+                className="text-slate-400 text-sm font-bold underline underline-offset-4 active:opacity-70">
                 📖 遊戲說明 / 技能卡效果
-              </a>
+              </button>
             </div>
           );
 
@@ -850,6 +1005,7 @@
             <div className="h-full flex flex-col items-center justify-center p-6 bg-black/55 relative">
               <ErrorModal />
               <button onClick={leaveRoom} className="absolute top-6 right-6 text-slate-400 bg-slate-800 px-4 py-2 rounded-full text-sm font-bold active:scale-95 transition">離開</button>
+              <button onClick={() => { setShowRules(true); setRulesTab(0); }} className="absolute top-6 left-6 text-slate-400 bg-slate-800 px-3 py-2 rounded-full text-xs font-bold active:scale-95 transition">📖 規則</button>
               <div className="bg-slate-800 p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm sm:max-w-md">
                 <h2 className="text-slate-400 text-lg font-bold">房間代碼：</h2>
                 <h1 className="text-6xl font-black tracking-widest my-6 select-all">{roomCode}</h1>
