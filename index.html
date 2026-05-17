@@ -162,7 +162,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-08';
+        const BUILD = '20260517-09';
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -367,6 +367,21 @@
             const iv = setInterval(write, 25000);
             return () => clearInterval(iv);
           }, [roomCode, myRole]);
+
+          // 老師斷線 → 自動結束遊戲（任一在線學生觸發，寫一次即可）
+          useEffect(() => {
+            if (!roomData || !roomCode || myRole === 'host') return;
+            if (!['playing', 'countdown'].includes(roomData.state)) return;
+            const hb = roomData.heartbeats?.host;
+            if (!hb || hb === 0) return; // host 從未連過，不誤判
+            if (Date.now() - hb > 60000) {
+              db.collection('rooms_v2').doc(roomCode).update({
+                state: 'end',
+                cardOverlay: null,
+                actionLog: ['💀 老師端斷線，遊戲強制結束！', ...(roomData.actionLog || [])].slice(0, 5)
+              }).catch(() => {});
+            }
+          }, [roomData]);
 
           // 技能遮罩自動清除（由發動者的客戶端負責）
           useEffect(() => {
@@ -644,12 +659,18 @@
             // 計算搶答倒數剩餘毫秒（用於解除暫停後恢復）
             const remainingMs = Math.max(500, roomData.buzzerOpenAt - Date.now());
 
+            // 計算被攻擊者的分數變化（供 overlay 顯示）
+            let targetDelta = null;
+            if (targetId) {
+              const before = roomData.scores?.[targetId] ?? 0;
+              const after = scores[targetId] ?? 0;
+              if (before !== after) targetDelta = after - before; // 負數代表扣分
+            }
+
             sound.attack();
             roomRef().update({
               scores, hands, statusEffects,
-              // 暫停搶答倒數（設為遙遠未來）
               buzzerOpenAt: Date.now() + 999999,
-              // 全員可見的技能發動遮罩
               cardOverlay: {
                 playerGroup: myRole,
                 yuanName: myYuan,
@@ -658,8 +679,9 @@
                 log,
                 targetGroup: targetId || null,
                 targetYuanName: targetYuan || null,
+                targetDelta,
                 remainingMs,
-                showUntil: Date.now() + 4500,
+                showUntil: Date.now() + 5000,
               },
               actionLog: [log, ...roomData.actionLog].slice(0, 5)
             });
@@ -667,12 +689,8 @@
           };
 
           const nextQ = () => {
-            // 清除「本回合結束後應解除」的狀態效果（cardBanned）
             const newStatus = JSON.parse(JSON.stringify(roomData.statusEffects || {}));
-            Object.keys(newStatus).forEach(k => {
-              newStatus[k].cardBanned = false;
-              // priorityBuzz 保留到下題用，答題後清除
-            });
+            Object.keys(newStatus).forEach(k => { newStatus[k].cardBanned = false; });
             const updates = roomData.qIndex + 1 < roomData.questions.length
               ? {
                   qIndex: roomData.qIndex + 1,
@@ -680,8 +698,9 @@
                   buzzerOpenAt: Date.now() + BUZZ_DELAY_NEW_Q * 1000,
                   answerDeadline: null, wrongAnswerers: [],
                   statusEffects: newStatus,
+                  cardOverlay: null,  // 清除殘留的技能遮罩
                 }
-              : { state: 'end' };
+              : { state: 'end', cardOverlay: null };
             roomRef().update(updates);
           };
 
@@ -714,10 +733,12 @@
             const myScore = roomData.scores?.[myRole] ?? 0;
             const alreadyWrong = (roomData.wrongAnswerers || []).includes(myRole);
             const myHand = roomData.hands?.[myRole] || [];
-            const unusedCards = myHand.filter(c => c.usedOnQ !== roomData.qIndex && c.usedOnQ !== -1);
-            const alreadyPlayed = myHand.some(c => c.usedOnQ === roomData.qIndex);
+            // 本回合已發動過一張（同回合限一張）
+            const alreadyPlayedThisRound = myHand.some(c => c.usedOnQ === roomData.qIndex);
             const cardBanned = roomData.statusEffects?.[myRole]?.cardBanned;
-            const needsTarget = (card) => card.type === 'target' || card.type === 'steal-exclusive' || card.type === 'steal-common' || card.type === 'card-ban' || card.type === 'alliance' || card.type === 'rotate';
+            // 可顯示的卡（未被永久棄置）
+            const visibleCards = myHand.filter(c => c.usedOnQ !== -1);
+            const needsTarget = (card) => ['target','steal-exclusive','steal-common','card-ban','alliance','rotate'].includes(card.type);
 
             if (myScore <= 0) return (
               <div className="mt-4 py-6 rounded-3xl font-black text-2xl bg-slate-700 text-slate-500 text-center">已淘汰</div>
@@ -733,10 +754,18 @@
                   <p className="text-slate-400 text-xs font-bold">搶答倒數</p>
                   <p className="text-5xl font-black text-white animate-bounce">{timeToOpen}</p>
                 </div>
-                {/* 技能卡發動區 */}
-                {!cardBanned && unusedCards.length > 0 && !alreadyPlayed && (
+
+                {/* ── 技能卡區（永遠顯示，本回合用過的灰掉）── */}
+                {visibleCards.length > 0 && (
                   <div className="bg-slate-800/80 border border-yellow-500/40 rounded-2xl p-3">
-                    <p className="text-[10px] text-yellow-400 font-bold mb-2">⚡ 倒數期間可發動一張技能卡</p>
+                    {cardBanned ? (
+                      <p className="text-center text-xs text-rose-400 font-bold">🚫 本回合被輿論炎上，無法發動技能</p>
+                    ) : alreadyPlayedThisRound ? (
+                      <p className="text-[10px] text-slate-500 font-bold mb-2">⚡ 本回合已發動一張（下題可再發動）</p>
+                    ) : (
+                      <p className="text-[10px] text-yellow-400 font-bold mb-2">⚡ 倒數期間可發動一張技能卡（每回合限一張）</p>
+                    )}
+
                     {pendingCard ? (
                       <div>
                         <p className="text-xs text-rose-300 font-bold mb-2">選擇攻擊目標：</p>
@@ -754,20 +783,27 @@
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
-                        {unusedCards.map(card => (
-                          <button key={card.uniqueId}
-                            onClick={() => needsTarget(card) ? setPendingCard(card) : playCard(card)}
-                            className={`text-xs px-2 py-1.5 rounded-lg font-bold active:scale-95 transition border
-                              ${card.isExclusive ? 'bg-yellow-500/20 border-yellow-500/60 text-yellow-300' : 'bg-slate-600/80 border-slate-500 text-white'}`}>
-                            {card.name}
-                          </button>
-                        ))}
+                        {visibleCards.map(card => {
+                          const usedThisRound = card.usedOnQ === roomData.qIndex;
+                          const blocked = cardBanned || alreadyPlayedThisRound || usedThisRound;
+                          return (
+                            <button key={card.uniqueId}
+                              onClick={() => { if (blocked) return; needsTarget(card) ? setPendingCard(card) : playCard(card); }}
+                              className={`text-xs px-2 py-1.5 rounded-lg font-bold transition border
+                                ${blocked
+                                  ? 'opacity-40 bg-slate-700 border-slate-600 text-slate-500 cursor-not-allowed'
+                                  : card.isExclusive
+                                    ? 'bg-yellow-500/20 border-yellow-500/60 text-yellow-300 active:scale-95'
+                                    : 'bg-slate-600/80 border-slate-500 text-white active:scale-95'}`}>
+                              <span className="block">{card.name}</span>
+                              {usedThisRound && <span className="block text-[9px] text-slate-500 font-normal">本回合已用</span>}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 )}
-                {cardBanned && <p className="text-center text-xs text-rose-400 font-bold">🚫 本回合被輿論炎上，無法發動技能</p>}
-                {alreadyPlayed && <p className="text-center text-xs text-slate-500 font-bold">本回合已發動一張技能卡</p>}
               </div>
             );
             // 搶答開放
@@ -939,56 +975,67 @@
           const team = myRole === 'host' ? null : roomData.teams[myRole];
           const buzzIsOpen = timeToOpen === 0;
 
-          // 斷線偵測（老師 heartbeat 超過 60 秒未更新）
-          const hostOffline = (() => {
-            const hb = roomData.heartbeats?.host;
-            return hb && hb > 0 && (Date.now() - hb) > 60000;
-          })();
-
           return (
             <div className="h-full flex flex-col font-sans overflow-hidden bg-black/55">
               <ErrorModal />
 
-              {/* ── 技能發動全域遮罩（所有人可見，擋住題目） ── */}
+              {/* ── 技能發動全域遮罩（遮住題目，所有人可見） ── */}
               {roomData.cardOverlay && (() => {
                 const ov = roomData.cardOverlay;
-                const isTarget = myRole === ov.targetGroup;
+                const isTarget = myRole !== 'host' && myRole === ov.targetGroup;
+                const isPlayer = myRole !== 'host' && myRole === ov.playerGroup;
                 const playerTeam = roomData.teams[ov.playerGroup];
                 const targetTeam = ov.targetGroup ? roomData.teams[ov.targetGroup] : null;
                 return (
-                  <div className={`fixed inset-0 z-[80] flex flex-col items-center justify-center p-6 animate-fade-in
-                    ${isTarget ? 'bg-rose-950/97 border-4 border-rose-500' : 'bg-slate-950/97'}`}>
-                    {isTarget && (
-                      <div className="mb-5 flex flex-col items-center gap-1">
-                        <span className="text-5xl animate-bounce">⚔️</span>
-                        <p className="text-rose-400 text-2xl font-black">你被攻擊了！</p>
-                      </div>
-                    )}
-                    <p className="text-slate-400 text-sm mb-1">技能發動！</p>
-                    <p className={`text-2xl font-black mb-4 ${playerTeam?.yuan?.text || 'text-white'}`}>{ov.yuanName}</p>
-                    <div className="bg-yellow-500/15 border-2 border-yellow-400 rounded-2xl p-5 text-center w-full max-w-xs mb-4">
-                      <p className="text-yellow-400 text-[10px] font-bold mb-1">⚡ 發動技能卡</p>
-                      <p className="text-2xl font-black text-white mb-2">【{ov.cardName}】</p>
-                      <p className="text-sm text-slate-300 leading-relaxed">{ov.cardDesc}</p>
+                  <div className={`fixed inset-0 z-[80] flex flex-col items-center justify-center p-5 animate-fade-in
+                    ${isTarget ? 'bg-red-950' : 'bg-slate-950'}`}
+                    style={{ backgroundColor: isTarget ? 'rgba(60,0,0,0.97)' : 'rgba(2,6,23,0.97)',
+                             border: isTarget ? '4px solid #ef4444' : '4px solid #334155' }}>
+
+                  {/* 被攻擊者專屬：大字提示 */}
+                  {isTarget && (
+                    <div className="mb-4 text-center">
+                      <div className="text-6xl mb-2" style={{animation:'bounce 0.6s infinite'}}>⚔️</div>
+                      <p className="text-red-400 text-3xl font-black">你被攻擊了！</p>
+                      {ov.targetDelta !== null && ov.targetDelta !== undefined && (
+                        <p className="text-red-300 text-5xl font-black mt-2">{ov.targetDelta} 分</p>
+                      )}
                     </div>
-                    {targetTeam && (
-                      <div className={`flex items-center gap-2 px-5 py-3 rounded-xl mb-3
-                        ${isTarget ? 'bg-rose-500/40 border border-rose-400' : 'bg-slate-700'}`}>
-                        <span className="text-slate-400 text-xs">攻擊目標：</span>
-                        <span className={`font-black ${targetTeam.yuan?.text}`}>{ov.targetYuanName}</span>
-                      </div>
-                    )}
-                    <p className="text-slate-500 text-xs text-center max-w-xs">{ov.log}</p>
+                  )}
+
+                  {/* 發動者資訊 */}
+                  <p className="text-slate-400 text-sm mb-0.5">⚡ 技能發動！</p>
+                  <p className={`text-xl font-black mb-3 ${playerTeam?.yuan?.text || 'text-white'}`}>
+                    {ov.yuanName}
+                  </p>
+
+                  {/* 卡牌框 */}
+                  <div className="rounded-2xl p-4 text-center w-full max-w-xs mb-3"
+                    style={{ background: 'rgba(234,179,8,0.12)', border: '2px solid rgba(234,179,8,0.7)' }}>
+                    <p className="text-yellow-400 text-xs font-bold mb-1">技能卡</p>
+                    <p className="text-xl font-black text-white mb-2">【{ov.cardName}】</p>
+                    <p className="text-sm text-slate-300 leading-relaxed">{ov.cardDesc}</p>
+                  </div>
+
+                  {/* 目標 */}
+                  {targetTeam && !isTarget && (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl mb-2"
+                      style={{ background: 'rgba(51,65,85,0.8)' }}>
+                      <span className="text-slate-400 text-xs">攻擊目標：</span>
+                      <span className={`font-black text-base ${targetTeam.yuan?.text}`}>{ov.targetYuanName}</span>
+                      {ov.targetDelta !== null && ov.targetDelta !== undefined && (
+                        <span className="text-red-400 font-black">{ov.targetDelta} 分</span>
+                      )}
+                    </div>
+                  )}
+
+                  {isPlayer && <p className="text-slate-500 text-xs mt-1">技能效果將在 5 秒後結束</p>}
+                  <p className="text-slate-600 text-xs text-center max-w-xs mt-1">{ov.log}</p>
                   </div>
                 );
               })()}
 
-              {/* ── 老師斷線通知（學生端） ── */}
-              {myRole !== 'host' && hostOffline && (
-                <div className="fixed top-0 inset-x-0 z-[90] bg-rose-600 text-white text-center py-2 px-4 font-bold text-sm animate-pulse">
-                  ⚠️ 老師端似乎已斷線，請告知老師重新整理頁面
-                </div>
-              )}
+              {/* 老師斷線時 useEffect 會自動把 state 改成 end，不需要 banner */}
               <header className="bg-slate-800 border-b border-slate-700 shadow-md">
                 <div className="p-3 flex justify-between items-center">
                   <span className="font-bold text-sm">房 {roomCode}</span>
