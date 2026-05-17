@@ -175,7 +175,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-12';
+        const BUILD = '20260517-13';
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -225,6 +225,48 @@
           examination: '發動此卡的回合，考試院免疫一切扣分攻擊（象徵文官中立）。此外，本回合其他四院若要答題或獲得分數，必須先「各繳交 10 分」給考試院。',
           control:     '指定任一院，直接沒收並「丟棄」他們手上的一張共同抽牌卡，並扣除對方 20 分（象徵糾舉失職）。',
         };
+
+        // ─── 規則說明用資料（直接搬自 rules.html）────────────────
+        const RULES_EXCLUSIVE_CARDS = [
+          { yuan:'立法院', color:'border-emerald-500', textColor:'text-emerald-400', bg:'bg-emerald-900/30', dot:'bg-emerald-500',
+            name:'預算刪減權',
+            desc:'指定其他任一院，直接扣除其 50 分。',
+            tip:'高傷害直攻！對方分數高時使用最痛，也可在關鍵局反超排名。',
+            tag:'主動・指定', tagColor:'bg-rose-500/20 text-rose-300' },
+          { yuan:'行政院', color:'border-blue-500', textColor:'text-blue-400', bg:'bg-blue-900/30', dot:'bg-blue-500',
+            name:'覆議與解散權',
+            desc:'被攻擊時可立即打出，抵銷傷害並將等量分數反彈給攻擊者。若攻擊者為立法院，加碼暫停其搶答一回合。',
+            tip:'反制神卡！在倒數期間先打出設置護盾，敵人攻擊即反傷，搭配立法院效果更強。',
+            tag:'被動・反彈', tagColor:'bg-blue-500/20 text-blue-300' },
+          { yuan:'司法院', color:'border-amber-500', textColor:'text-amber-400', bg:'bg-amber-900/30', dot:'bg-amber-500',
+            name:'違憲宣告權',
+            desc:'強制撤銷「上一回合」答對組別在那回合獲得的所有分數。',
+            tip:'後發制人！等對方剛答對拿到高分，下一題立刻宣告違憲，讓分數直接蒸發。',
+            tag:'主動・逆轉', tagColor:'bg-amber-500/20 text-amber-300' },
+          { yuan:'監察院', color:'border-rose-500', textColor:'text-rose-400', bg:'bg-rose-900/30', dot:'bg-rose-500',
+            name:'彈劾權',
+            desc:'指定任一院：棄置對方手中一張共同卡，並扣除對方 20 分。',
+            tip:'雙重壓制！讓對方同時失去資源與分數，尤其適合在強勢隊伍即將用牌前打出。',
+            tag:'主動・削弱', tagColor:'bg-rose-500/20 text-rose-300' },
+          { yuan:'考試院', color:'border-purple-500', textColor:'text-purple-400', bg:'bg-purple-900/30', dot:'bg-purple-500',
+            name:'銓敘權',
+            desc:'本回合免疫一切扣分攻擊。此外，本回合其他四院若要答題得分，須各先繳交 10 分給考試院。',
+            tip:'守護加課稅！分數危急時自保，同時被動收益。若全場都繳費你可多賺 40 分！',
+            tag:'主動・防護', tagColor:'bg-purple-500/20 text-purple-300' },
+        ];
+
+        const RULES_COMMON_CARDS = [
+          { id:'c01', name:'甲級動員', desc:'下一回合本組享有絕對優先搶答權，不需比手速。若答錯則開放其他組搶答。', tag:'搶答優勢', tagColor:'bg-emerald-500/20 text-emerald-300', emoji:'⚡' },
+          { id:'c02', name:'重大建設', desc:'本回合若搶答正確，得分直接乘以 2（+80 分）。', tag:'得分翻倍', tagColor:'bg-yellow-500/20 text-yellow-300', emoji:'🏗️' },
+          { id:'c03', name:'社會福利', desc:'強制全場分數最高的組別，無條件轉移 20 分給分數最低的組別。', tag:'縮小差距', tagColor:'bg-blue-500/20 text-blue-300', emoji:'🤝' },
+          { id:'c04', name:'機密外洩', desc:'指定一組，直接奪走對方的五院專屬技能卡，納為己用。對方永久失去該技能。', tag:'竊取技能', tagColor:'bg-rose-500/20 text-rose-300', emoji:'🕵️' },
+          { id:'c05', name:'擴權爭議', desc:'隨機從指定一組手中，盲抽一張未使用的共同卡，納為己用。若對方無共同卡則無效。', tag:'竊取資源', tagColor:'bg-orange-500/20 text-orange-300', emoji:'👐' },
+          { id:'c06', name:'輿論炎上', desc:'讓指定一組深陷公關危機，下一回合禁止使用任何技能卡（含院專屬卡）。', tag:'封印技能', tagColor:'bg-red-500/20 text-red-300', emoji:'🔥' },
+          { id:'c07', name:'民意支持', desc:'護身符！可保留在手中。當遭受任何扣分攻擊時立即打出，完全抵銷該次攻擊。', tag:'完全防禦', tagColor:'bg-cyan-500/20 text-cyan-300', emoji:'🛡️' },
+          { id:'c08', name:'朝野協商', desc:'指定另一組強行結盟。下一回合只要對方答題得分，本組免費獲得一半的分數。', tag:'結盟收益', tagColor:'bg-teal-500/20 text-teal-300', emoji:'🤜🤛' },
+          { id:'c09', name:'選區重劃', desc:'全場所有組別必須將選定項目（全部分數 或 全部共同卡）往左邊傳交給下一組。', tag:'全場大亂', tagColor:'bg-violet-500/20 text-violet-300', emoji:'🔄' },
+          { id:'c10', name:'特別預算', desc:'國庫撥款！全場所有組別各加 10 分，本組另外再免費抽 1 張共同卡。', tag:'全場加分', tagColor:'bg-pink-500/20 text-pink-300', emoji:'💰' },
+        ];
 
         // 共同卡完整說明（CardRule.txt 原文）
         const COMMON_CARD_FULL_DESC = {
@@ -869,152 +911,200 @@
             );
           };
 
-          // ── 規則說明 Modal ──────────────────────────────────────
+          // ── 規則說明 Modal（rules.html 完整移植） ──────────────
           if (showRules) {
-            const yuanOrder = ['executive','legislative','judicial','examination','control'];
             return (
-              <div className="h-full flex flex-col bg-slate-950 text-white overflow-hidden">
+              <div className="h-full flex flex-col bg-black/60 text-white overflow-hidden">
                 {/* 頂欄 + 分頁 */}
-                <div className="shrink-0 border-b border-slate-800">
-                  <div className="flex items-center gap-3 px-4 pt-4 pb-2">
+                <div className="shrink-0 bg-slate-900/95 border-b border-slate-700 shadow-lg" style={{ backdropFilter:'blur(8px)' }}>
+                  <div className="flex items-center gap-3 px-4 py-3">
                     <button onClick={() => setShowRules(false)}
-                      className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 text-slate-300 font-black text-lg active:scale-95 transition">✕</button>
-                    <h2 className="text-white font-black text-base flex-1">遊戲說明 &amp; 技能卡</h2>
+                      className="bg-slate-700 active:scale-95 px-4 py-2 rounded-full text-sm font-bold transition">← 返回</button>
+                    <h1 className="font-black text-lg">五院大亂鬥 — 遊戲說明</h1>
                   </div>
-                  <div className="flex px-2">
-                    {['📋 遊戲規則','⭐ 院專屬卡','🃏 共同卡牌'].map((label,i) => (
+                  <div className="flex px-4 gap-6 overflow-x-auto">
+                    {[{label:'📋 遊戲規則'},{label:'⭐ 院專屬卡'},{label:'🎴 共同卡牌'}].map((t,i) => (
                       <button key={i} onClick={() => setRulesTab(i)}
-                        className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition ${rulesTab===i ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-slate-500 active:text-slate-300'}`}>
-                        {label}
+                        className={`text-sm font-bold py-2 whitespace-nowrap transition`}
+                        style={{ borderBottom:'3px solid', borderColor: rulesTab===i ? '#facc15' : 'transparent', color: rulesTab===i ? '#facc15' : '#94a3b8' }}>
+                        {t.label}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* 內容 */}
-                <div className="flex-1 overflow-auto p-4">
-                  {/* ── Tab 0: 遊戲規則 ── */}
-                  {rulesTab === 0 && (
-                    <div className="space-y-3 max-w-sm mx-auto">
-                      {/* 基本流程 */}
-                      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                        <h3 className="text-yellow-400 font-black mb-3 text-base">🎮 基本流程</h3>
-                        <ol className="text-slate-300 text-sm leading-relaxed space-y-1.5 list-decimal pl-5">
-                          <li>每組選擇想要的院（行政、立法、司法、考試、監察）</li>
-                          <li>每院開局自動獲得「五院專屬技能卡」一張</li>
-                          <li>再從牌堆中隨機抽取一張「共同技能卡」</li>
-                          <li>抽完共同卡後即確認陣營，無法重選</li>
-                          <li>老師按下「同步啟動」，全員 5 秒倒數後正式開始</li>
-                        </ol>
-                      </div>
+                <div className="flex-1 overflow-auto" style={{ WebkitOverflowScrolling:'touch' }}>
+                  <div className="max-w-xl mx-auto px-4 py-6 pb-20">
 
-                      {/* 分數系統 */}
-                      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                        <h3 className="text-yellow-400 font-black mb-3 text-base">⚡ 分數系統</h3>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex items-center gap-3">
-                            <span className="text-emerald-400 font-black text-lg w-12 text-center">+40</span>
-                            <span className="text-slate-300">答對加分</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-rose-400 font-black text-lg w-12 text-center">-15</span>
-                            <span className="text-slate-300">答錯／超時扣分</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-slate-500 font-black text-lg w-12 text-center">💀</span>
-                            <span className="text-slate-300">分數歸零即淘汰，無法再答題</span>
-                          </div>
-                          <p className="text-slate-400 text-xs mt-3 pt-2 border-t border-slate-700 leading-relaxed">
-                            開局各組 100 分，沒有上限。技能卡會大幅改變分數，請謹慎使用。
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* 搶答流程 */}
-                      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                        <h3 className="text-yellow-400 font-black mb-3 text-base">🚨 搶答流程</h3>
-                        <ol className="text-slate-300 text-sm leading-relaxed space-y-1.5 list-decimal pl-5">
-                          <li>每題開始有 <span className="text-yellow-300 font-black">5 秒</span>技能發動倒數</li>
-                          <li>倒數期間最多發動一張技能卡（院專屬或共同卡）</li>
-                          <li>有多人發動時依序發動，效果全場可見，並暫停題目時間</li>
-                          <li>倒數結束後「搶答」按鈕亮起，最快按下者獲得答題權</li>
-                          <li>答題者有 10 秒作答時間，超時視為答錯</li>
-                          <li>答錯則本題無法再搶答，由其他組接續</li>
-                          <li>每張技能卡整局只能用一次，用完永久消失</li>
-                        </ol>
-                      </div>
-
-                      <div className="bg-slate-800/50 rounded-2xl p-3 border border-slate-700/50 text-center">
-                        <p className="text-slate-400 text-xs">⚠ 攻擊可能被「民意支持」護盾或「行政院」反彈抵銷，要小心！</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Tab 1: 院專屬卡 ── */}
-                  {rulesTab === 1 && (
-                    <div className="space-y-3 max-w-sm mx-auto">
-                      <p className="text-slate-500 text-xs text-center">點擊卡片可查看使用技巧</p>
-                      {yuanOrder.map(key => {
-                        const card = YUAN_EXCLUSIVE_CARDS[key];
-                        const yuan = YUAN_DB.find(y => y.id === key);
-                        const flipped = !!flippedCards[key];
-                        return (
-                          <div key={key} className="flip-card" style={{ height:'210px' }}
-                            onClick={() => { sound.draw(); setFlippedCards(p => ({...p, [key]: !p[key]})); }}>
-                            <div className={`flip-inner${flipped ? ' is-flipped' : ''}`} style={{ height:'210px' }}>
-                              {/* 正面 */}
-                              <div className="flip-face flex flex-col justify-between"
-                                style={{ background:'rgba(22,30,50,0.95)', border:'2px solid rgba(234,179,8,0.45)' }}>
-                                <div>
-                                  <div className="flex items-start justify-between mb-1.5">
-                                    <div>
-                                      <p className={`text-[10px] font-bold ${yuan?.text}`}>{yuan?.name}</p>
-                                      <p className="text-white font-black text-base">【{card.name}】</p>
-                                    </div>
-                                    <span className="text-[9px] text-yellow-600 border border-yellow-800 bg-yellow-900/30 px-1.5 py-0.5 rounded shrink-0">院專屬</span>
-                                  </div>
-                                  <p className="text-slate-300 text-[11px] leading-relaxed">{YUAN_CARD_FULL_DESC[key]}</p>
-                                </div>
-                                <p className="text-slate-600 text-[9px] mt-2">點擊查看使用技巧 →</p>
-                              </div>
-                              {/* 背面 */}
-                              <div className="flip-face flip-back-face flex flex-col justify-between"
-                                style={{ background:'rgba(15,20,45,0.98)', border:'2px solid rgba(99,102,241,0.55)' }}>
-                                <div>
-                                  <p className="text-indigo-400 text-[10px] font-black mb-2">💡 使用技巧</p>
-                                  <p className="text-white text-sm leading-relaxed">{YUAN_CARD_TIPS[key]}</p>
-                                </div>
-                                <p className="text-slate-600 text-[9px] mt-2">← 點擊返回</p>
+                    {/* ── Tab 0: 遊戲規則 ── */}
+                    {rulesTab === 0 && (
+                      <div>
+                        <h2 className="text-xl font-black text-yellow-400 mb-4">基本流程</h2>
+                        <div className="space-y-3 mb-8">
+                          <div className="bg-slate-800/90 rounded-2xl p-5 border-l-4 border-yellow-400 animate-fade-in">
+                            <div className="flex gap-4 items-start">
+                              <span className="text-3xl font-black text-yellow-400 shrink-0 leading-none">1</span>
+                              <div>
+                                <p className="font-black text-white mb-1">選擇陣營，持有技能卡</p>
+                                <p className="text-slate-300 text-sm leading-relaxed">
+                                  各組選擇五院之一，持有一張<span className="text-yellow-300 font-bold">院專屬技能卡</span>，並從牌堆隨機抽取一張<span className="text-purple-300 font-bold">共同技能卡</span>。
+                                </p>
                               </div>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          <div className="bg-slate-800/90 rounded-2xl p-5 border-l-4 border-emerald-400 animate-fade-in" style={{animationDelay:'80ms'}}>
+                            <div className="flex gap-4 items-start">
+                              <span className="text-3xl font-black text-emerald-400 shrink-0 leading-none">2</span>
+                              <div>
+                                <p className="font-black text-white mb-1">搶答得分</p>
+                                <p className="text-slate-300 text-sm leading-relaxed">
+                                  答對 <span className="text-emerald-400 font-black">+40 分</span>，答錯 <span className="text-rose-400 font-black">-15 分</span>。分數歸零後淘汰，無法再搶答。
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-slate-800/90 rounded-2xl p-5 border-l-4 border-amber-400 animate-fade-in" style={{animationDelay:'160ms'}}>
+                            <div className="flex gap-4 items-start">
+                              <span className="text-3xl font-black text-amber-400 shrink-0 leading-none">3</span>
+                              <div>
+                                <p className="font-black text-white mb-1">發動技能卡</p>
+                                <p className="text-slate-300 text-sm leading-relaxed">
+                                  每題搶答<span className="text-amber-300 font-bold">倒數 5 秒</span>期間，可發動一張技能卡（每回合限一張）。<span className="text-rose-300 font-bold">按下搶答後不可再出牌</span>。
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-slate-800/90 rounded-2xl p-5 border-l-4 border-blue-400 animate-fade-in" style={{animationDelay:'240ms'}}>
+                            <div className="flex gap-4 items-start">
+                              <span className="text-3xl font-black text-blue-400 shrink-0 leading-none">4</span>
+                              <div>
+                                <p className="font-black text-white mb-1">結算順序</p>
+                                <p className="text-slate-300 text-sm leading-relaxed">
+                                  同一回合多人出牌，依照發動順序依序結算效果。所有效果對所有玩家可見。
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
 
-                  {/* ── Tab 2: 共同卡牌 ── */}
-                  {rulesTab === 2 && (
-                    <div className="space-y-2 max-w-sm mx-auto">
-                      {[
-                        { label:'增益與逆轉', ids:['c01','c02','c03'], color:'text-emerald-400', bg:'bg-emerald-900/20', border:'border-emerald-800/50' },
-                        { label:'竊取與干擾', ids:['c04','c05','c06'], color:'text-rose-400', bg:'bg-rose-900/20', border:'border-rose-800/50' },
-                        { label:'防禦與互助', ids:['c07','c08'], color:'text-blue-400', bg:'bg-blue-900/20', border:'border-blue-800/50' },
-                        { label:'全場變動', ids:['c09','c10'], color:'text-amber-400', bg:'bg-amber-900/20', border:'border-amber-800/50' },
-                      ].map(cat => (
-                        <div key={cat.label}>
-                          <p className={`text-[10px] font-black mb-1.5 mt-2 ${cat.color}`}>▸ {cat.label}</p>
-                          {COMMON_CARD_POOL.filter(c => cat.ids.includes(c.id)).map((card, i) => (
-                            <div key={card.id} className={`rounded-xl p-3 border mb-1.5 animate-fade-in ${cat.bg} ${cat.border}`}
-                              style={{ animationDelay:`${i*60}ms` }}>
-                              <p className="text-white font-black text-sm mb-0.5">🃏 {card.name}</p>
-                              <p className="text-slate-300 text-[11px] leading-relaxed">{COMMON_CARD_FULL_DESC[card.id] || card.desc}</p>
+                        <h2 className="text-xl font-black text-yellow-400 mb-4">分數系統</h2>
+                        <div className="bg-slate-800/90 rounded-2xl p-5 mb-8 animate-fade-in">
+                          <div className="grid grid-cols-3 gap-3 text-center">
+                            <div className="bg-slate-900 rounded-xl p-3">
+                              <p className="text-slate-400 text-xs mb-1">開局分數</p>
+                              <p className="text-2xl font-black text-white">100</p>
+                              <p className="text-slate-500 text-xs">分</p>
+                            </div>
+                            <div className="bg-emerald-900/50 rounded-xl p-3">
+                              <p className="text-slate-400 text-xs mb-1">答對</p>
+                              <p className="text-2xl font-black text-emerald-400">+40</p>
+                              <p className="text-slate-500 text-xs">分</p>
+                            </div>
+                            <div className="bg-rose-900/50 rounded-xl p-3">
+                              <p className="text-slate-400 text-xs mb-1">答錯</p>
+                              <p className="text-2xl font-black text-rose-400">-15</p>
+                              <p className="text-slate-500 text-xs">分</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 bg-slate-900 rounded-xl p-3 text-center">
+                            <p className="text-slate-400 text-xs">分數歸零 → <span className="text-rose-400 font-bold">淘汰</span>，無法再搶答</p>
+                          </div>
+                        </div>
+
+                        <h2 className="text-xl font-black text-yellow-400 mb-4">搶答流程</h2>
+                        <div className="bg-slate-800/90 rounded-2xl p-5 animate-fade-in">
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-3">
+                              <span className="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center text-xs font-black shrink-0">1</span>
+                              <p className="text-sm text-slate-300">新題目出現，<span className="text-amber-300 font-bold">5 秒倒數</span>開始（此時可發動技能卡）</p>
+                            </div>
+                            <div className="w-px h-3 bg-slate-600 ml-3.5"></div>
+                            <div className="flex items-center gap-3">
+                              <span className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-black shrink-0">2</span>
+                              <p className="text-sm text-slate-300">倒數結束 → <span className="text-emerald-300 font-bold">搶答開放</span>，拼手速按搶答</p>
+                            </div>
+                            <div className="w-px h-3 bg-slate-600 ml-3.5"></div>
+                            <div className="flex items-center gap-3">
+                              <span className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-xs font-black shrink-0">3</span>
+                              <p className="text-sm text-slate-300">搶到者有 <span className="text-blue-300 font-bold">10 秒</span>回答，超時視為答錯</p>
+                            </div>
+                            <div className="w-px h-3 bg-slate-600 ml-3.5"></div>
+                            <div className="flex items-center gap-3">
+                              <span className="w-7 h-7 rounded-full bg-purple-500 flex items-center justify-center text-xs font-black shrink-0">4</span>
+                              <p className="text-sm text-slate-300">答錯後其他存活組別可再搶答，答對才進下一題</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Tab 1: 院專屬卡 ── */}
+                    {rulesTab === 1 && (
+                      <div>
+                        <p className="text-slate-400 text-sm mb-5">每組開局持有，強大且獨特。點擊卡片可翻面查看使用時機。</p>
+                        <div className="space-y-4">
+                          {RULES_EXCLUSIVE_CARDS.map((c, i) => {
+                            const flipped = !!flippedCards[c.yuan];
+                            return (
+                              <div key={c.yuan} className="flip-card animate-fade-in"
+                                style={{ minHeight:'200px', animationDelay:`${i*60}ms`, cursor:'pointer' }}
+                                onClick={() => { sound.draw(); setFlippedCards(p => ({...p, [c.yuan]: !p[c.yuan]})); }}>
+                                <div className={`flip-inner${flipped ? ' is-flipped' : ''}`} style={{ minHeight:'200px' }}>
+                                  {/* 正面 */}
+                                  <div className={`flip-face ${c.bg} ${c.color}`} style={{ borderWidth:'2px', borderStyle:'solid' }}>
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                          <span className={`w-2.5 h-2.5 rounded-full ${c.dot} shrink-0`}></span>
+                                          <span className={`${c.textColor} text-xs font-bold`}>{c.yuan} 專屬</span>
+                                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${c.tagColor}`}>{c.tag}</span>
+                                        </div>
+                                        <h3 className="text-lg font-black text-white mb-2">【{c.name}】</h3>
+                                        <p className="text-slate-300 text-sm leading-relaxed">{c.desc}</p>
+                                      </div>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-3 text-right">點擊查看使用時機 →</p>
+                                  </div>
+                                  {/* 背面 */}
+                                  <div className={`flip-face flip-back-face ${c.bg} ${c.color} flex flex-col justify-center`} style={{ borderWidth:'2px', borderStyle:'solid' }}>
+                                    <p className="text-xs font-black text-yellow-400 mb-3">💡 使用時機</p>
+                                    <p className="text-slate-200 text-sm leading-relaxed">{c.tip}</p>
+                                    <p className="text-[10px] text-slate-500 mt-4 text-right">← 點擊返回</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Tab 2: 共同卡牌 ── */}
+                    {rulesTab === 2 && (
+                      <div>
+                        <p className="text-slate-400 text-sm mb-5">開局隨機抽得一張，部分效果可讓你再抽。靈活使用改變局勢！</p>
+                        <div className="space-y-3">
+                          {RULES_COMMON_CARDS.map((c, i) => (
+                            <div key={c.id} className="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 animate-fade-in"
+                              style={{ animationDelay:`${i*50}ms` }}>
+                              <div className="flex gap-3 items-start">
+                                <span className="text-2xl shrink-0 leading-none mt-0.5">{c.emoji}</span>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                    <h3 className="text-base font-black text-white">【{c.name}】</h3>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${c.tagColor}`}>{c.tag}</span>
+                                  </div>
+                                  <p className="text-slate-300 text-sm leading-relaxed">{c.desc}</p>
+                                </div>
+                              </div>
                             </div>
                           ))}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </div>
+                    )}
+
+                  </div>
                 </div>
               </div>
             );
