@@ -162,7 +162,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-07';
+        const BUILD = '20260517-08';
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -357,6 +357,32 @@
             }
           }, [roomData?.state]);
 
+          // 心跳：每 25 秒寫入（供斷線偵測）
+          useEffect(() => {
+            if (!roomCode || !myRole) return;
+            const write = () => db.collection('rooms_v2').doc(roomCode).update({
+              [`heartbeats.${myRole}`]: Date.now()
+            }).catch(() => {});
+            write();
+            const iv = setInterval(write, 25000);
+            return () => clearInterval(iv);
+          }, [roomCode, myRole]);
+
+          // 技能遮罩自動清除（由發動者的客戶端負責）
+          useEffect(() => {
+            if (!roomData?.cardOverlay || !roomCode) return;
+            const { showUntil, remainingMs, playerGroup } = roomData.cardOverlay;
+            if (playerGroup !== myRole) return;
+            const delay = Math.max(0, showUntil - Date.now());
+            const timer = setTimeout(() => {
+              db.collection('rooms_v2').doc(roomCode).update({
+                cardOverlay: null,
+                buzzerOpenAt: Date.now() + Math.max(500, remainingMs),
+              }).catch(() => {});
+            }, delay);
+            return () => clearTimeout(timer);
+          }, [roomData?.cardOverlay]);
+
           // 音效：遊戲開始同步倒數
           useEffect(() => {
             if (syncCountdown === null || syncCountdown === 0) return;
@@ -394,8 +420,8 @@
               const yuanKey = yuanKeys[i];
               const exclusiveBase = YUAN_EXCLUSIVE_CARDS[yuanKey];
               hands[gid] = [
-                { ...exclusiveBase, uniqueId: `${gid}_exc`, isExclusive: true, used: false },
-                { ...shuffledCommon[i], uniqueId: `${gid}_com0`, isExclusive: false, used: false },
+                { ...exclusiveBase, uniqueId: `${gid}_exc`, isExclusive: true, usedOnQ: null },
+                { ...shuffledCommon[i], uniqueId: `${gid}_com0`, isExclusive: false, usedOnQ: null },
               ];
             });
             return hands;
@@ -428,6 +454,8 @@
                 questions: shuffle(QUESTION_BANK),
                 qIndex: 0, buzzerWinner: null,
                 buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
+                cardOverlay: null,
+                heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
                 actionLog: ['🎯 遊戲房間已建立，等待各組加入...']
               });
               setRoomCode(code);
@@ -537,71 +565,72 @@
           // 發動技能卡
           const playCard = (card, targetId = null) => {
             if (!roomData || !myRole || myRole === 'host') return;
-            // 已被禁卡
             if (roomData.statusEffects?.[myRole]?.cardBanned) { showError('本回合被輿論炎上，無法發動技能卡！'); return; }
-            // 本回合已發動過卡
+            // 同一題只能發動一張（usedOnQ === 本題 index）
             const myHand = roomData.hands?.[myRole] || [];
-            if (myHand.some(c => c.used)) { showError('本回合只能發動一張技能卡！'); return; }
+            if (myHand.some(c => c.usedOnQ === roomData.qIndex)) { showError('本回合只能發動一張技能卡！'); return; }
 
             sound.draw();
             const myYuan = roomData.teams[myRole].yuan.name;
+            const targetYuan = targetId ? roomData.teams[targetId]?.yuan?.name : null;
             let scores = { ...roomData.scores };
             let statusEffects = JSON.parse(JSON.stringify(roomData.statusEffects || {}));
             let hands = JSON.parse(JSON.stringify(roomData.hands || {}));
             let log = `⚡ ${myYuan} 發動「${card.name}」`;
 
-            // 標記為已使用
-            hands[myRole] = hands[myRole].map(c => c.uniqueId === card.uniqueId ? { ...c, used: true } : c);
+            // 標記為已使用（記錄用在第幾題）
+            hands[myRole] = hands[myRole].map(c =>
+              c.uniqueId === card.uniqueId ? { ...c, usedOnQ: roomData.qIndex } : c
+            );
 
             // 效果處理
             switch (card.type) {
-              case 'target': // 立法院【預算刪減權】、監察院【彈劾權】
+              case 'target':
                 if (targetId) {
                   scores[targetId] = Math.max(0, (scores[targetId] || 0) - (card.dmg || 50));
-                  // 監察院彈劾：額外棄置對方一張共同卡
                   if (card.id === 'con' && hands[targetId]) {
-                    const commonIdx = hands[targetId].findIndex(c => !c.isExclusive && !c.used);
-                    if (commonIdx !== -1) hands[targetId][commonIdx].used = true;
+                    const ci = hands[targetId].findIndex(c => !c.isExclusive && c.usedOnQ === null);
+                    if (ci !== -1) hands[targetId][ci].usedOnQ = -1; // -1 = 被棄置
                   }
-                  log += `，鎖定 ${roomData.teams[targetId]?.yuan?.name}（-${card.dmg || 50} 分）`;
+                  log += `，鎖定 ${targetYuan}（-${card.dmg || 50} 分）`;
                 }
                 break;
-              case 'redistribute': // 社會福利
+              case 'redistribute':
                 { const entries = Object.entries(scores).sort((a,b) => b[1]-a[1]);
                   const top = entries[0][0], bot = entries[entries.length-1][0];
                   if (top !== bot) { scores[top] = Math.max(0, scores[top]-20); scores[bot] += 20; }
                   log += `，${roomData.teams[top]?.yuan?.name} 轉移 20 分給 ${roomData.teams[bot]?.yuan?.name}`; }
                 break;
-              case 'all-bonus': // 特別預算
+              case 'all-bonus':
                 Object.keys(scores).forEach(k => { scores[k] = (scores[k]||0) + 10; });
                 { const extra = shuffle(COMMON_CARD_POOL)[0];
-                  hands[myRole].push({ ...extra, uniqueId: `${myRole}_extra_${Date.now()}`, isExclusive: false, used: false }); }
+                  hands[myRole].push({ ...extra, uniqueId: `${myRole}_extra_${Date.now()}`, isExclusive: false, usedOnQ: null }); }
                 log += `，全場各 +10 分，本組再抽一張共同卡`;
                 break;
-              case 'double-points': // 重大建設
+              case 'double-points':
                 if (!statusEffects[myRole]) statusEffects[myRole] = {};
                 statusEffects[myRole].doublePoints = true;
                 log += `，本回合答對得 80 分`;
                 break;
-              case 'card-ban': // 輿論炎上
+              case 'card-ban':
                 if (targetId) {
                   if (!statusEffects[targetId]) statusEffects[targetId] = {};
                   statusEffects[targetId].cardBanned = true;
-                  log += `，${roomData.teams[targetId]?.yuan?.name} 下回合禁用技能卡`;
+                  log += `，${targetYuan} 下回合禁用技能卡`;
                 }
                 break;
-              case 'reactive': // 行政院【覆議與解散權】
-              case 'shield':   // 民意支持
+              case 'reactive':
+              case 'shield':
                 if (!statusEffects[myRole]) statusEffects[myRole] = {};
                 statusEffects[myRole].shielded = true;
                 log += `，已設置防禦護盾`;
                 break;
-              case 'priority-next': // 甲級動員
+              case 'priority-next':
                 if (!statusEffects[myRole]) statusEffects[myRole] = {};
                 statusEffects[myRole].priorityBuzz = true;
                 log += `，下一回合享優先搶答權`;
                 break;
-              case 'auto': // 司法院【違憲宣告權】
+              case 'auto':
                 { const lw = roomData.lastRoundWinner, lp = roomData.lastRoundPoints || 0;
                   if (lw && lp > 0) {
                     scores[lw] = Math.max(0, (scores[lw]||0) - lp);
@@ -612,9 +641,26 @@
                 log += `（效果開發中）`;
             }
 
+            // 計算搶答倒數剩餘毫秒（用於解除暫停後恢復）
+            const remainingMs = Math.max(500, roomData.buzzerOpenAt - Date.now());
+
             sound.attack();
             roomRef().update({
               scores, hands, statusEffects,
+              // 暫停搶答倒數（設為遙遠未來）
+              buzzerOpenAt: Date.now() + 999999,
+              // 全員可見的技能發動遮罩
+              cardOverlay: {
+                playerGroup: myRole,
+                yuanName: myYuan,
+                cardName: card.name,
+                cardDesc: card.desc,
+                log,
+                targetGroup: targetId || null,
+                targetYuanName: targetYuan || null,
+                remainingMs,
+                showUntil: Date.now() + 4500,
+              },
               actionLog: [log, ...roomData.actionLog].slice(0, 5)
             });
             setPendingCard(null);
@@ -657,6 +703,8 @@
               questions: shuffle(QUESTION_BANK),
               qIndex: 0, buzzerWinner: null,
               buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
+              cardOverlay: null,
+              heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
               actionLog: ['🔄 房主已重置遊戲，等待重新分配身分...']
             });
           };
@@ -666,8 +714,8 @@
             const myScore = roomData.scores?.[myRole] ?? 0;
             const alreadyWrong = (roomData.wrongAnswerers || []).includes(myRole);
             const myHand = roomData.hands?.[myRole] || [];
-            const unusedCards = myHand.filter(c => !c.used);
-            const alreadyPlayed = myHand.some(c => c.used);
+            const unusedCards = myHand.filter(c => c.usedOnQ !== roomData.qIndex && c.usedOnQ !== -1);
+            const alreadyPlayed = myHand.some(c => c.usedOnQ === roomData.qIndex);
             const cardBanned = roomData.statusEffects?.[myRole]?.cardBanned;
             const needsTarget = (card) => card.type === 'target' || card.type === 'steal-exclusive' || card.type === 'steal-common' || card.type === 'card-ban' || card.type === 'alliance' || card.type === 'rotate';
 
@@ -694,7 +742,7 @@
                         <p className="text-xs text-rose-300 font-bold mb-2">選擇攻擊目標：</p>
                         <div className="grid grid-cols-2 gap-1.5">
                           {Object.values(roomData.teams)
-                            .filter(t => t.id !== myRole && (roomData.scores?.[t.id] ?? 0) > 0)
+                            .filter(t => t.id !== myRole && (roomData.scores?.[t.id] ?? 100) > 0)
                             .map(t => (
                               <button key={t.id} onClick={() => playCard(pendingCard, t.id)}
                                 className={`p-2 rounded-xl text-white font-black text-xs active:scale-95 transition ${t.yuan?.color}`}>
@@ -772,11 +820,18 @@
                 {myRole === 'host' ? (
                   <div>
                     <div className="flex flex-wrap justify-center gap-2 mb-6">
-                      {Object.values(roomData.teams).map(t => (
-                        <span key={t.id} className={`px-3 py-1.5 rounded-full font-bold text-xs border-2 ${t.joined ? `${t.yuan?.color} border-transparent text-white` : 'bg-slate-900 border-slate-600 text-slate-500'}`}>
-                          {t.yuan?.name} {t.joined ? '✓ 已連線' : '等待中'}
-                        </span>
-                      ))}
+                      {Object.values(roomData.teams).map(t => {
+                        const hb = roomData.heartbeats?.[t.id] || 0;
+                        const offline = t.joined && hb > 0 && (Date.now() - hb) > 60000;
+                        return (
+                          <span key={t.id} className={`px-3 py-1.5 rounded-full font-bold text-xs border-2
+                            ${offline ? 'bg-rose-900 border-rose-500 text-rose-300'
+                              : t.joined ? `${t.yuan?.color} border-transparent text-white`
+                              : 'bg-slate-900 border-slate-600 text-slate-500'}`}>
+                            {t.yuan?.name} {offline ? '⚠ 斷線' : t.joined ? '✓ 已連線' : '等待中'}
+                          </span>
+                        );
+                      })}
                     </div>
                     <button onClick={startSync} className="w-full bg-yellow-500 text-black py-4 rounded-full font-black text-xl active:scale-95 transition">同步啟動</button>
                   </div>
@@ -838,10 +893,12 @@
                         ✅ 確認加入！
                       </button>
                     )}
-                    <button onClick={() => { setPendingGroup(null); setCardRevealed(false); }}
-                      className="w-full text-slate-500 text-sm py-2 active:opacity-70">
-                      ← 返回重選
-                    </button>
+                    {!cardRevealed && (
+                      <button onClick={() => { setPendingGroup(null); setCardRevealed(false); }}
+                        className="w-full text-slate-500 text-sm py-2 active:opacity-70">
+                        ← 返回重選
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -882,9 +939,56 @@
           const team = myRole === 'host' ? null : roomData.teams[myRole];
           const buzzIsOpen = timeToOpen === 0;
 
+          // 斷線偵測（老師 heartbeat 超過 60 秒未更新）
+          const hostOffline = (() => {
+            const hb = roomData.heartbeats?.host;
+            return hb && hb > 0 && (Date.now() - hb) > 60000;
+          })();
+
           return (
             <div className="h-full flex flex-col font-sans overflow-hidden bg-black/55">
               <ErrorModal />
+
+              {/* ── 技能發動全域遮罩（所有人可見，擋住題目） ── */}
+              {roomData.cardOverlay && (() => {
+                const ov = roomData.cardOverlay;
+                const isTarget = myRole === ov.targetGroup;
+                const playerTeam = roomData.teams[ov.playerGroup];
+                const targetTeam = ov.targetGroup ? roomData.teams[ov.targetGroup] : null;
+                return (
+                  <div className={`fixed inset-0 z-[80] flex flex-col items-center justify-center p-6 animate-fade-in
+                    ${isTarget ? 'bg-rose-950/97 border-4 border-rose-500' : 'bg-slate-950/97'}`}>
+                    {isTarget && (
+                      <div className="mb-5 flex flex-col items-center gap-1">
+                        <span className="text-5xl animate-bounce">⚔️</span>
+                        <p className="text-rose-400 text-2xl font-black">你被攻擊了！</p>
+                      </div>
+                    )}
+                    <p className="text-slate-400 text-sm mb-1">技能發動！</p>
+                    <p className={`text-2xl font-black mb-4 ${playerTeam?.yuan?.text || 'text-white'}`}>{ov.yuanName}</p>
+                    <div className="bg-yellow-500/15 border-2 border-yellow-400 rounded-2xl p-5 text-center w-full max-w-xs mb-4">
+                      <p className="text-yellow-400 text-[10px] font-bold mb-1">⚡ 發動技能卡</p>
+                      <p className="text-2xl font-black text-white mb-2">【{ov.cardName}】</p>
+                      <p className="text-sm text-slate-300 leading-relaxed">{ov.cardDesc}</p>
+                    </div>
+                    {targetTeam && (
+                      <div className={`flex items-center gap-2 px-5 py-3 rounded-xl mb-3
+                        ${isTarget ? 'bg-rose-500/40 border border-rose-400' : 'bg-slate-700'}`}>
+                        <span className="text-slate-400 text-xs">攻擊目標：</span>
+                        <span className={`font-black ${targetTeam.yuan?.text}`}>{ov.targetYuanName}</span>
+                      </div>
+                    )}
+                    <p className="text-slate-500 text-xs text-center max-w-xs">{ov.log}</p>
+                  </div>
+                );
+              })()}
+
+              {/* ── 老師斷線通知（學生端） ── */}
+              {myRole !== 'host' && hostOffline && (
+                <div className="fixed top-0 inset-x-0 z-[90] bg-rose-600 text-white text-center py-2 px-4 font-bold text-sm animate-pulse">
+                  ⚠️ 老師端似乎已斷線，請告知老師重新整理頁面
+                </div>
+              )}
               <header className="bg-slate-800 border-b border-slate-700 shadow-md">
                 <div className="p-3 flex justify-between items-center">
                   <span className="font-bold text-sm">房 {roomCode}</span>
