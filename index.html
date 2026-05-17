@@ -108,11 +108,61 @@
         })();
     </script>
 
+    <!-- ── 背景音樂控制器 ──────────────────────────────────── -->
+    <script>
+      const bgm = (() => {
+        const lobby = new Audio('bgm_lobby.mp3');
+        const game  = new Audio('bgm_game.mp3');
+        lobby.loop = true;  lobby.volume = 0.35;
+        game.loop  = true;  game.volume  = 0.40;
+
+        let active   = null;
+        let unlocked = false;
+        let pending  = 'lobby';   // 使用者互動前暫存
+
+        const _switch = (next) => {
+          if (active === next) return;
+          // 淡出舊曲
+          if (active) {
+            const old = active;
+            const fade = setInterval(() => {
+              if (old.volume > 0.03) { old.volume = Math.max(0, old.volume - 0.03); }
+              else { old.pause(); old.currentTime = 0; old.volume = old === lobby ? 0.35 : 0.40; clearInterval(fade); }
+            }, 40);
+          }
+          // 淡入新曲
+          next.volume = 0;
+          next.play().catch(() => {});
+          const fadeIn = setInterval(() => {
+            const target = next === lobby ? 0.35 : 0.40;
+            if (next.volume < target - 0.03) { next.volume = Math.min(target, next.volume + 0.03); }
+            else { next.volume = target; clearInterval(fadeIn); }
+          }, 40);
+          active = next;
+        };
+
+        const unlock = () => {
+          if (unlocked) return;
+          unlocked = true;
+          _switch(pending === 'game' ? game : lobby);
+        };
+
+        // 第一次觸碰即解鎖（瀏覽器 autoplay 政策）
+        document.addEventListener('click',      unlock, { once: true });
+        document.addEventListener('touchstart', unlock, { once: true });
+
+        return {
+          toLobby: () => { pending = 'lobby'; if (unlocked) _switch(lobby); },
+          toGame:  () => { pending = 'game';  if (unlocked) _switch(game);  },
+        };
+      })();
+    </script>
+
     <script src="questions.js"></script>
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-06';
+        const BUILD = '20260517-07';
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -297,6 +347,15 @@
             if (currWrongLen > prevWrongLen.current) sound.wrong();
             prevWrongLen.current = currWrongLen;
           }, [roomData]);
+
+          // BGM：依遊戲狀態切換
+          useEffect(() => {
+            if (!roomData || roomData.state === 'lobby' || roomData.state === 'countdown' || roomData.state === 'end') {
+              bgm.toLobby();
+            } else if (roomData.state === 'playing') {
+              bgm.toGame();
+            }
+          }, [roomData?.state]);
 
           // 音效：遊戲開始同步倒數
           useEffect(() => {
