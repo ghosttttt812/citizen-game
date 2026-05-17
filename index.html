@@ -124,8 +124,8 @@
     <!-- ── 背景音樂控制器 ──────────────────────────────────── -->
     <script>
       const bgm = (() => {
-        const lobby = new Audio('bgm_lobby.mp3');
-        const game  = new Audio('bgm_game.mp3');
+        const lobby = new Audio('Last Cappuccino in Rio - Chris Haugen.mp3');
+        const game  = new Audio('Helios - Jeremy Black.mp3');
         lobby.loop = true;  lobby.volume = 0.35;
         game.loop  = true;  game.volume  = 0.40;
 
@@ -175,23 +175,25 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-13';
+        const BUILD = '20260517-14';
 
+        // 莫蘭迪色系（依 color.png 設計）
+        // 行政院=藍灰 / 立法院=紫灰 / 司法院=深灰藍 / 考試院=灰棕 / 監察院=灰綠
         const YUAN_DB = [
-          { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
-          { id: 'legislative', name: '立法院', color: 'bg-emerald-500', text: 'text-emerald-500' },
-          { id: 'judicial', name: '司法院', color: 'bg-amber-500', text: 'text-amber-500' },
-          { id: 'examination', name: '考試院', color: 'bg-purple-500', text: 'text-purple-500' },
-          { id: 'control', name: '監察院', color: 'bg-rose-500', text: 'text-rose-500' }
+          { id: 'executive',   name: '行政院', color: 'bg-[#6E8194]', text: 'text-[#A8BACA]' },
+          { id: 'legislative', name: '立法院', color: 'bg-[#94808E]', text: 'text-[#C5A8B4]' },
+          { id: 'judicial',    name: '司法院', color: 'bg-[#4E5F77]', text: 'text-[#8FA0B6]' },
+          { id: 'examination', name: '考試院', color: 'bg-[#9D9077]', text: 'text-[#C4B8A0]' },
+          { id: 'control',     name: '監察院', color: 'bg-[#7B8C7B]', text: 'text-[#A8B7A8]' }
         ];
 
         // 五院專屬技能卡（每組開局各持有一張）
         const YUAN_EXCLUSIVE_CARDS = {
-          executive:   { id: 'exec', name: '覆議與解散權', desc: '被攻擊時抵銷傷害並反彈；攻擊者為立法院時暫停其一回合', type: 'reactive', rarity: 'text-blue-400' },
-          legislative: { id: 'leg',  name: '預算刪減權',   desc: '指定其他任一院，直接扣除其 50 分',                        type: 'target',   rarity: 'text-emerald-400', dmg: 50 },
-          judicial:    { id: 'jud',  name: '違憲宣告權',   desc: '撤銷上回合答對院之所有得分',                              type: 'auto',     rarity: 'text-amber-400' },
-          examination: { id: 'exam', name: '銓敘權',       desc: '本回合免疫所有扣分；其他院各繳 10 分方可答題',            type: 'self',     rarity: 'text-purple-400' },
-          control:     { id: 'con',  name: '彈劾權',       desc: '指定一院：棄置其一張共同卡，並扣除 20 分',               type: 'target',   rarity: 'text-rose-400', dmg: 20 },
+          executive:   { id: 'exec', name: '覆議與解散權', desc: '被攻擊時抵銷傷害並反彈；攻擊者為立法院時暫停其一回合', type: 'reactive', rarity: 'text-[#A8BACA]' },
+          legislative: { id: 'leg',  name: '預算刪減權',   desc: '指定其他任一院，直接扣除其 50 分',                        type: 'target',   rarity: 'text-[#C5A8B4]', dmg: 50 },
+          judicial:    { id: 'jud',  name: '違憲宣告權',   desc: '撤銷上回合答對院之所有得分',                              type: 'auto',     rarity: 'text-[#8FA0B6]' },
+          examination: { id: 'exam', name: '銓敘權',       desc: '本回合免疫所有扣分；其他院各繳 10 分方可答題',            type: 'self',     rarity: 'text-[#C4B8A0]' },
+          control:     { id: 'con',  name: '彈劾權',       desc: '指定一院：棄置其一張共同卡，並扣除 20 分',               type: 'target',   rarity: 'text-[#A8B7A8]', dmg: 20 },
         };
 
         // 共同抽牌卡堆（10 種）
@@ -227,28 +229,29 @@
         };
 
         // ─── 規則說明用資料（直接搬自 rules.html）────────────────
+        // 規則 modal 用：每張院專屬卡的色卡（依莫蘭迪色系）
         const RULES_EXCLUSIVE_CARDS = [
-          { yuan:'立法院', color:'border-emerald-500', textColor:'text-emerald-400', bg:'bg-emerald-900/30', dot:'bg-emerald-500',
+          { yuan:'立法院', color:'border-[#94808E]', textColor:'text-[#C5A8B4]', bgStyle:{ background:'rgba(148,128,142,0.18)' }, dot:'bg-[#94808E]',
             name:'預算刪減權',
             desc:'指定其他任一院，直接扣除其 50 分。',
             tip:'高傷害直攻！對方分數高時使用最痛，也可在關鍵局反超排名。',
             tag:'主動・指定', tagColor:'bg-rose-500/20 text-rose-300' },
-          { yuan:'行政院', color:'border-blue-500', textColor:'text-blue-400', bg:'bg-blue-900/30', dot:'bg-blue-500',
+          { yuan:'行政院', color:'border-[#6E8194]', textColor:'text-[#A8BACA]', bgStyle:{ background:'rgba(110,129,148,0.18)' }, dot:'bg-[#6E8194]',
             name:'覆議與解散權',
             desc:'被攻擊時可立即打出，抵銷傷害並將等量分數反彈給攻擊者。若攻擊者為立法院，加碼暫停其搶答一回合。',
             tip:'反制神卡！在倒數期間先打出設置護盾，敵人攻擊即反傷，搭配立法院效果更強。',
             tag:'被動・反彈', tagColor:'bg-blue-500/20 text-blue-300' },
-          { yuan:'司法院', color:'border-amber-500', textColor:'text-amber-400', bg:'bg-amber-900/30', dot:'bg-amber-500',
+          { yuan:'司法院', color:'border-[#4E5F77]', textColor:'text-[#8FA0B6]', bgStyle:{ background:'rgba(78,95,119,0.22)' }, dot:'bg-[#4E5F77]',
             name:'違憲宣告權',
             desc:'強制撤銷「上一回合」答對組別在那回合獲得的所有分數。',
             tip:'後發制人！等對方剛答對拿到高分，下一題立刻宣告違憲，讓分數直接蒸發。',
             tag:'主動・逆轉', tagColor:'bg-amber-500/20 text-amber-300' },
-          { yuan:'監察院', color:'border-rose-500', textColor:'text-rose-400', bg:'bg-rose-900/30', dot:'bg-rose-500',
+          { yuan:'監察院', color:'border-[#7B8C7B]', textColor:'text-[#A8B7A8]', bgStyle:{ background:'rgba(123,140,123,0.18)' }, dot:'bg-[#7B8C7B]',
             name:'彈劾權',
             desc:'指定任一院：棄置對方手中一張共同卡，並扣除對方 20 分。',
             tip:'雙重壓制！讓對方同時失去資源與分數，尤其適合在強勢隊伍即將用牌前打出。',
             tag:'主動・削弱', tagColor:'bg-rose-500/20 text-rose-300' },
-          { yuan:'考試院', color:'border-purple-500', textColor:'text-purple-400', bg:'bg-purple-900/30', dot:'bg-purple-500',
+          { yuan:'考試院', color:'border-[#9D9077]', textColor:'text-[#C4B8A0]', bgStyle:{ background:'rgba(157,144,119,0.18)' }, dot:'bg-[#9D9077]',
             name:'銓敘權',
             desc:'本回合免疫一切扣分攻擊。此外，本回合其他四院若要答題得分，須各先繳交 10 分給考試院。',
             tip:'守護加課稅！分數危急時自保，同時被動收益。若全場都繳費你可多賺 40 分！',
@@ -1052,7 +1055,7 @@
                                 onClick={() => { sound.draw(); setFlippedCards(p => ({...p, [c.yuan]: !p[c.yuan]})); }}>
                                 <div className={`flip-inner${flipped ? ' is-flipped' : ''}`} style={{ minHeight:'200px' }}>
                                   {/* 正面 */}
-                                  <div className={`flip-face ${c.bg} ${c.color}`} style={{ borderWidth:'2px', borderStyle:'solid' }}>
+                                  <div className={`flip-face ${c.color}`} style={{ borderWidth:'2px', borderStyle:'solid', ...c.bgStyle }}>
                                     <div className="flex items-start justify-between gap-3">
                                       <div>
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1067,7 +1070,7 @@
                                     <p className="text-[10px] text-slate-500 mt-3 text-right">點擊查看使用時機 →</p>
                                   </div>
                                   {/* 背面 */}
-                                  <div className={`flip-face flip-back-face ${c.bg} ${c.color} flex flex-col justify-center`} style={{ borderWidth:'2px', borderStyle:'solid' }}>
+                                  <div className={`flip-face flip-back-face ${c.color} flex flex-col justify-center`} style={{ borderWidth:'2px', borderStyle:'solid', ...c.bgStyle }}>
                                     <p className="text-xs font-black text-yellow-400 mb-3">💡 使用時機</p>
                                     <p className="text-slate-200 text-sm leading-relaxed">{c.tip}</p>
                                     <p className="text-[10px] text-slate-500 mt-4 text-right">← 點擊返回</p>
@@ -1513,10 +1516,15 @@
                   </div>
                 </div>
 
-                {/* 搶答／技能卡區域（獨立區塊，不受題目卡內 overflow 影響） */}
-                {myRole !== 'host' && roomData.state === 'playing' && !roomData.buzzerWinner && (
-                  <div className="shrink-0 max-h-[42vh] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    {renderBuzzerArea(team)}
+                {/* 搶答／技能卡區域 —— 固定高度，避免倒數/卡片/搶答按鈕切換時題目跳動 */}
+                {myRole !== 'host' && (
+                  <div className="shrink-0 overflow-y-auto transition-all duration-300"
+                    style={{
+                      height: roomData.state === 'playing' && !roomData.buzzerWinner ? '34vh' : '0px',
+                      opacity: roomData.state === 'playing' && !roomData.buzzerWinner ? 1 : 0,
+                      WebkitOverflowScrolling: 'touch'
+                    }}>
+                    {roomData.state === 'playing' && !roomData.buzzerWinner && renderBuzzerArea(team)}
                   </div>
                 )}
 
