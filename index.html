@@ -84,6 +84,46 @@
         .app-accent-text  { color: var(--app-accent) !important; }
         .app-accent-border{ border-color: var(--app-accent) !important; }
         .app-shadow       { box-shadow: 0 8px 28px rgba(80, 65, 40, 0.18); }
+
+        /* ── 答對 / 答錯 動畫 ──────────────────────────────────── */
+        @keyframes feedbackFlash {
+          0% { opacity: 0; }
+          25% { opacity: 1; }
+          80% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+        @keyframes correctPop {
+          0% { transform: scale(0.2); opacity: 0; }
+          30% { transform: scale(1.35); opacity: 1; }
+          50% { transform: scale(1); }
+          85% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(0.85); opacity: 0; }
+        }
+        @keyframes wrongShake {
+          0%, 100% { transform: translateX(0) scale(1); opacity: 0; }
+          5% { opacity: 1; }
+          10%, 50% { transform: translateX(-18px) scale(1.05); opacity: 1; }
+          30%, 70% { transform: translateX(18px) scale(1.05); opacity: 1; }
+          90% { transform: translateX(-6px) scale(1); opacity: 1; }
+          100% { opacity: 0; }
+        }
+        .fb-bg-correct { animation: feedbackFlash 1.4s ease-out forwards; background: rgba(16,185,129,0.32); }
+        .fb-bg-wrong   { animation: feedbackFlash 1.3s ease-out forwards; background: rgba(239,68,68,0.32); }
+        .fb-pop-correct { animation: correctPop 1.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .fb-pop-wrong   { animation: wrongShake 1.3s ease-in-out forwards; }
+
+        /* ── 突發事件 banner 進場動畫 ───────────────────────────── */
+        @keyframes surpriseEnter {
+          0% { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+          55% { transform: scale(1.18) rotate(4deg); opacity: 1; }
+          80% { transform: scale(0.95) rotate(-2deg); }
+          100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        @keyframes surprisePulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.6); }
+          50%      { box-shadow: 0 0 0 14px rgba(244, 63, 94, 0); }
+        }
+        .surprise-banner { animation: surpriseEnter 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275), surprisePulse 1.6s ease-out 0.7s infinite; }
     </style>
 </head>
 <body class="app-text overflow-hidden select-none">
@@ -224,7 +264,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-16';
+        const BUILD = '20260517-17';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -337,11 +377,34 @@
 
         const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
 
+        // ── 突發事件題庫（隨機從五院挑一題：誰是該院院長）
+        // 第一個選項為正確答案（執行時會隨機洗牌）；老師可直接編輯姓名
+        const SURPRISE_EVENTS = [
+          { yuan:'行政院', text:'誰是現任行政院院長？',
+            options:['卓榮泰', '蘇貞昌', '陳建仁', '賴清德'], answer:0 },
+          { yuan:'立法院', text:'誰是現任立法院院長？',
+            options:['韓國瑜', '游錫堃', '王金平', '蘇嘉全'], answer:0 },
+          { yuan:'司法院', text:'誰是現任司法院院長？',
+            options:['許宗力', '賴英照', '翁岳生', '賴浩敏'], answer:0 },
+          { yuan:'監察院', text:'誰是現任監察院院長？',
+            options:['陳菊', '張博雅', '王建煊', '錢復'], answer:0 },
+          { yuan:'考試院', text:'誰是現任考試院院長？',
+            options:['黃榮村', '伍錦霖', '關中', '姚嘉文'], answer:0 },
+        ];
+        const buildSurpriseEvent = () => {
+          const t = SURPRISE_EVENTS[Math.floor(Math.random() * SURPRISE_EVENTS.length)];
+          const correctOption = t.options[t.answer];
+          const shuffled = shuffle(t.options);
+          return { yuan:t.yuan, text:t.text, options:shuffled, answer:shuffled.indexOf(correctOption) };
+        };
+
         const CORRECT_POINTS = 40;      // 答對得分
         const WRONG_PENALTY  = 15;      // 答錯扣分
         const BUZZ_DELAY_NEW_Q = 5;    // 新題目搶答延遲秒數（技能發動窗口）
         const BUZZ_DELAY_RETRY = 1;    // 答錯後換人搶答延遲
         const ANSWER_TIME_LIMIT = 10;  // 答題時間上限（秒）
+        const SURPRISE_TIME_LIMIT = 15; // 突發事件作答時間（秒）
+        const SURPRISE_POINTS = 80;     // 突發事件答對得分（雙倍）
 
         function App() {
           const [user, setUser] = useState(null);
@@ -361,6 +424,8 @@
           const [showRules, setShowRules] = useState(false);
           const [rulesTab, setRulesTab] = useState(0);
           const [flippedCards, setFlippedCards] = useState({});
+          const [feedbackOverlay, setFeedbackOverlay] = useState(null);
+          const [surpriseTimeLeft, setSurpriseTimeLeft] = useState(null);
 
           const prevBuzzerWinner = useRef(null);
           const prevState = useRef(null);
@@ -475,17 +540,43 @@
             handleTimeout();
           }, [answerTimeLeft]);
 
-          // 音效：根據狀態變化觸發
+          // 音效 + 答對/答錯動畫：根據狀態變化觸發
           useEffect(() => {
             if (!roomData) return;
             if (roomData.buzzerWinner && roomData.buzzerWinner !== prevBuzzerWinner.current) sound.buzz();
             prevBuzzerWinner.current = roomData.buzzerWinner;
-            if (roomData.lastRoundWinner && roomData.lastRoundWinner !== prevLastRoundWinner.current) sound.correct();
+
+            // 答對
+            if (roomData.lastRoundWinner && roomData.lastRoundWinner !== prevLastRoundWinner.current) {
+              sound.correct();
+              const team = roomData.teams[roomData.lastRoundWinner];
+              setFeedbackOverlay({
+                type: 'correct',
+                yuan: team?.yuan?.name,
+                yuanText: team?.yuan?.text,
+                points: roomData.lastRoundPoints || CORRECT_POINTS,
+              });
+              setTimeout(() => setFeedbackOverlay(null), 1400);
+            }
             prevLastRoundWinner.current = roomData.lastRoundWinner;
+
             if (roomData.state === 'end' && prevState.current !== 'end') sound.victory();
             prevState.current = roomData.state;
+
+            // 答錯
             const currWrongLen = (roomData.wrongAnswerers || []).length;
-            if (currWrongLen > prevWrongLen.current) sound.wrong();
+            if (currWrongLen > prevWrongLen.current) {
+              sound.wrong();
+              const lastWrongId = roomData.wrongAnswerers[currWrongLen - 1];
+              const team = roomData.teams[lastWrongId];
+              setFeedbackOverlay({
+                type: 'wrong',
+                yuan: team?.yuan?.name,
+                yuanText: team?.yuan?.text,
+                points: -WRONG_PENALTY,
+              });
+              setTimeout(() => setFeedbackOverlay(null), 1300);
+            }
             prevWrongLen.current = currWrongLen;
           }, [roomData]);
 
@@ -493,7 +584,7 @@
           useEffect(() => {
             if (!roomData || roomData.state === 'lobby' || roomData.state === 'countdown' || roomData.state === 'end') {
               bgm.toLobby();
-            } else if (roomData.state === 'playing') {
+            } else if (roomData.state === 'playing' || roomData.state === 'surprise') {
               bgm.toGame();
             }
           }, [roomData?.state]);
@@ -512,7 +603,7 @@
           // 老師斷線 → 自動結束遊戲（任一在線學生觸發，寫一次即可）
           useEffect(() => {
             if (!roomData || !roomCode || myRole === 'host') return;
-            if (!['playing', 'countdown'].includes(roomData.state)) return;
+            if (!['playing', 'countdown', 'surprise'].includes(roomData.state)) return;
             const hb = roomData.heartbeats?.host;
             if (!hb || hb === 0) return; // host 從未連過，不誤判
             if (Date.now() - hb > 60000) {
@@ -523,6 +614,38 @@
               }).catch(() => {});
             }
           }, [roomData]);
+
+          // 突發事件本地倒數
+          useEffect(() => {
+            if (roomData?.state !== 'surprise' || !roomData?.surpriseEvent?.deadline) {
+              setSurpriseTimeLeft(null);
+              return;
+            }
+            const update = () => {
+              const t = Math.ceil((roomData.surpriseEvent.deadline - Date.now()) / 1000);
+              setSurpriseTimeLeft(Math.max(0, t));
+            };
+            update();
+            const iv = setInterval(update, 200);
+            return () => clearInterval(iv);
+          }, [roomData?.surpriseEvent?.deadline, roomData?.state]);
+
+          // 突發事件結算（host 監看：全員答完或時間到）
+          useEffect(() => {
+            if (roomData?.state !== 'surprise' || !roomData?.surpriseEvent || myRole !== 'host') return;
+            const check = () => {
+              const ev = roomData.surpriseEvent;
+              if (!ev) return;
+              const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
+              const answered = Object.keys(ev.answers || {});
+              const allDone = joinedIds.length > 0 && joinedIds.every(id => answered.includes(id));
+              const expired = Date.now() > ev.deadline;
+              if (allDone || expired) resolveSurpriseEvent();
+            };
+            check();
+            const iv = setInterval(check, 600);
+            return () => clearInterval(iv);
+          }, [roomData?.state, roomData?.surpriseEvent, myRole]);
 
           // 技能遮罩自動清除（由發動者的客戶端負責）
           useEffect(() => {
@@ -611,6 +734,10 @@
                 qIndex: 0, buzzerWinner: null,
                 buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
                 cardOverlay: null,
+                // 突發事件：在 qIndex 3~7 結束後隨機觸發一次
+                surpriseAfter: 3 + Math.floor(Math.random() * 5),
+                surpriseTriggered: false,
+                surpriseEvent: null,
                 heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
                 actionLog: ['🎯 遊戲房間已建立，等待各組加入...']
               });
@@ -835,6 +962,23 @@
             if (!roomData || roomData.state !== 'playing') return; // 防止重複或錯誤觸發
             const newStatus = JSON.parse(JSON.stringify(roomData.statusEffects || {}));
             Object.keys(newStatus).forEach(k => { newStatus[k].cardBanned = false; });
+
+            // 觸發突發事件：在第 4~8 題（qIndex 3~7）其中一題結束後突然插入
+            const shouldTriggerSurprise = !roomData.surpriseTriggered
+              && typeof roomData.surpriseAfter === 'number'
+              && roomData.qIndex === roomData.surpriseAfter;
+            if (shouldTriggerSurprise) {
+              roomRef().update({
+                state: 'surprise',
+                surpriseTriggered: true,
+                surpriseEvent: { ...buildSurpriseEvent(), answers: {}, deadline: Date.now() + SURPRISE_TIME_LIMIT * 1000 },
+                buzzerWinner: null, buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
+                statusEffects: newStatus, cardOverlay: null,
+                actionLog: [`🚨 突發事件！全員作答（答對 +${SURPRISE_POINTS} / 答錯 -${WRONG_PENALTY}）`, ...roomData.actionLog].slice(0, 5),
+              });
+              return;
+            }
+
             const updates = roomData.qIndex + 1 < (roomData.questions || []).length
               ? {
                   qIndex: roomData.qIndex + 1,
@@ -846,6 +990,44 @@
                 }
               : { state: 'end', cardOverlay: null };
             roomRef().update(updates);
+          };
+
+          // 學生在突發事件中作答（每人只可選一次）
+          const answerSurprise = (idx) => {
+            if (myRole === 'host' || !roomData?.surpriseEvent) return;
+            if (roomData.surpriseEvent.answers?.[myRole] !== undefined) return;
+            roomRef().update({ [`surpriseEvent.answers.${myRole}`]: idx }).catch(() => {});
+          };
+
+          // 結算突發事件（由 host 端在「全員答完」或「時間到」時觸發）
+          const resolveSurpriseEvent = () => {
+            if (!roomData?.surpriseEvent || myRole !== 'host') return;
+            const ev = roomData.surpriseEvent;
+            const newScores = { ...roomData.scores };
+            const correctNames = [], wrongNames = [];
+            Object.entries(ev.answers || {}).forEach(([gid, idx]) => {
+              if (idx === ev.answer) {
+                newScores[gid] = (newScores[gid] || 0) + SURPRISE_POINTS;
+                correctNames.push(roomData.teams[gid]?.yuan?.name);
+              } else {
+                newScores[gid] = Math.max(0, (newScores[gid] || 0) - WRONG_PENALTY);
+                wrongNames.push(roomData.teams[gid]?.yuan?.name);
+              }
+            });
+            const nextIdx = roomData.qIndex + 1;
+            const hasMore = nextIdx < (roomData.questions || []).length;
+            roomRef().update({
+              scores: newScores,
+              state: hasMore ? 'playing' : 'end',
+              qIndex: hasMore ? nextIdx : roomData.qIndex,
+              buzzerOpenAt: hasMore ? Date.now() + BUZZ_DELAY_NEW_Q * 1000 : 0,
+              buzzerWinner: null, answerDeadline: null, wrongAnswerers: [],
+              surpriseEvent: null, cardOverlay: null,
+              actionLog: [
+                `🎯 突發事件結算：答對 +${SURPRISE_POINTS}${correctNames.length ? ` (${correctNames.join('、')})` : ''}${wrongNames.length ? ` / 答錯 -${WRONG_PENALTY} (${wrongNames.join('、')})` : ''}`,
+                ...roomData.actionLog
+              ].slice(0, 5),
+            });
           };
 
           const resetGame = () => {
@@ -867,6 +1049,9 @@
               qIndex: 0, buzzerWinner: null,
               buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
               cardOverlay: null,
+              surpriseAfter: 3 + Math.floor(Math.random() * 5),
+              surpriseTriggered: false,
+              surpriseEvent: null,
               heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
               actionLog: ['🔄 房主已重置遊戲，等待重新分配身分...']
             });
@@ -1318,6 +1503,88 @@
             </div>
           );
 
+          // ── 突發事件全員作答畫面 ──────────────────────────────
+          if (roomData.state === 'surprise' && roomData.surpriseEvent) {
+            const ev = roomData.surpriseEvent;
+            const myAnswer = ev.answers?.[myRole];
+            const hasAnswered = myAnswer !== undefined && myRole !== 'host';
+            const yuanInfo = YUAN_DB.find(y => y.name === ev.yuan);
+            const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
+            const answeredCount = Object.keys(ev.answers || {}).length;
+            return (
+              <div className="h-full flex flex-col overflow-hidden" style={{ background:'rgba(252,232,232,0.96)' }}>
+                <ErrorModal />
+                {feedbackOverlay && (
+                  <div className={`fixed inset-0 z-[95] pointer-events-none flex items-center justify-center ${feedbackOverlay.type === 'correct' ? 'fb-bg-correct' : 'fb-bg-wrong'}`}>
+                    <div className={feedbackOverlay.type === 'correct' ? 'fb-pop-correct' : 'fb-pop-wrong'}>
+                      <div className="text-center">
+                        <div className="text-9xl mb-2">{feedbackOverlay.type === 'correct' ? '✅' : '❌'}</div>
+                        <p className={`text-3xl font-black ${feedbackOverlay.yuanText || ''}`}>{feedbackOverlay.yuan}</p>
+                        <p className={`text-5xl font-black mt-2 ${feedbackOverlay.type === 'correct' ? 'text-emerald-700' : 'text-rose-700'}`}>{feedbackOverlay.points > 0 ? '+' : ''}{feedbackOverlay.points} 分</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Banner */}
+                <div className="surprise-banner shrink-0 bg-rose-600 text-white text-center py-4 px-3 shadow-md">
+                  <h1 className="text-2xl sm:text-3xl font-black">🚨 突發事件！</h1>
+                  <p className="text-xs sm:text-sm opacity-90 mt-1">全員作答 · 答對 +{SURPRISE_POINTS} 分 · 答錯 -{WRONG_PENALTY} 分</p>
+                </div>
+
+                <main className="flex-1 flex flex-col p-4 gap-3 overflow-auto" style={{ WebkitOverflowScrolling:'touch' }}>
+                  {/* 題目 */}
+                  <div className="app-card-3 rounded-2xl p-5 border-2 border-rose-300 text-center app-shadow">
+                    <p className={`text-xs font-black mb-2 ${yuanInfo?.text || 'app-accent-text'}`}>關於 {ev.yuan}</p>
+                    <h2 className="text-xl sm:text-2xl font-black app-text leading-relaxed">{ev.text}</h2>
+                  </div>
+
+                  {/* 倒數 */}
+                  <div className="flex items-center justify-between px-2">
+                    <span className="text-xs app-text-2">已作答 {answeredCount} / {joinedIds.length}</span>
+                    {surpriseTimeLeft !== null && (
+                      <span className={`text-2xl font-black ${surpriseTimeLeft <= 5 ? 'text-rose-700 animate-pulse' : 'app-text'}`}>⏱ {surpriseTimeLeft}s</span>
+                    )}
+                  </div>
+
+                  {/* 選項 */}
+                  {myRole === 'host' ? (
+                    <div className="app-card-2 rounded-2xl p-6 text-center">
+                      <p className="app-text-2 font-bold">老師端：等待學生作答</p>
+                      <p className="app-text-3 text-xs mt-2">作答完畢或時間到後自動結算</p>
+                      <div className="mt-4 grid grid-cols-1 gap-2">
+                        {ev.options.map((o, i) => (
+                          <div key={i} className={`p-3 rounded-xl border-2 text-left ${i === ev.answer ? 'app-accent-border app-accent-bg' : 'app-card-3 app-border app-text'}`}>
+                            <span className="inline-block w-7 h-7 rounded-full text-center leading-7 mr-3 text-sm font-black" style={{ background:'rgba(255,255,255,0.25)' }}>{['A','B','C','D'][i]}</span>
+                            {o} {i === ev.answer && <span className="ml-2 text-xs font-bold">✓ 正解</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2.5">
+                      {ev.options.map((o, i) => {
+                        const picked = myAnswer === i;
+                        return (
+                          <button key={i} onClick={() => answerSurprise(i)} disabled={hasAnswered}
+                            className={`p-4 rounded-xl border-2 text-left text-base font-bold mobile-btn transition
+                              ${picked ? 'app-accent-bg app-accent-border text-white' : hasAnswered ? 'app-card-2 app-border app-text-3' : 'app-card-3 app-text app-accent-border active:scale-95 shadow-md'}`}>
+                            <span className="inline-block w-7 h-7 rounded-full text-center leading-7 mr-3 text-sm font-black shrink-0"
+                              style={{ background: picked ? 'rgba(255,255,255,0.3)' : 'rgba(157,144,119,0.25)' }}>{['A','B','C','D'][i]}</span>
+                            {o}
+                          </button>
+                        );
+                      })}
+                      <p className="text-center text-sm font-bold mt-1 app-text-2">
+                        {hasAnswered ? '✅ 已作答，等待其他組或時間到…' : '請選擇答案'}
+                      </p>
+                    </div>
+                  )}
+                </main>
+              </div>
+            );
+          }
+
           // 遊戲主畫面 (playing / gacha)
           const q = roomData.questions[roomData.qIndex];
           const team = myRole === 'host' ? null : roomData.teams[myRole];
@@ -1326,6 +1593,19 @@
           return (
             <div className="h-full flex flex-col font-sans overflow-hidden app-overlay">
               <ErrorModal />
+
+              {/* ── 答對 / 答錯 動畫覆蓋層 ── */}
+              {feedbackOverlay && (
+                <div className={`fixed inset-0 z-[95] pointer-events-none flex items-center justify-center ${feedbackOverlay.type === 'correct' ? 'fb-bg-correct' : 'fb-bg-wrong'}`}>
+                  <div className={feedbackOverlay.type === 'correct' ? 'fb-pop-correct' : 'fb-pop-wrong'}>
+                    <div className="text-center">
+                      <div className="text-9xl mb-2">{feedbackOverlay.type === 'correct' ? '✅' : '❌'}</div>
+                      <p className={`text-3xl font-black ${feedbackOverlay.yuanText || 'app-text'}`}>{feedbackOverlay.yuan}</p>
+                      <p className={`text-5xl font-black mt-2 ${feedbackOverlay.type === 'correct' ? 'text-emerald-700' : 'text-rose-700'}`}>{feedbackOverlay.points > 0 ? '+' : ''}{feedbackOverlay.points} 分</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* ── 技能發動全域遮罩（遮住題目，所有人可見） ── */}
               {roomData.cardOverlay && (() => {
