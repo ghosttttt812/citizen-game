@@ -35,9 +35,58 @@
           padding-left: 1.5rem;
           padding-right: 1.5rem;
         }
+
+        /* ── 莫蘭迪院色（class 寫死，避免 Tailwind CDN 漏掃 arbitrary value）── */
+        .yuan-bg-executive   { background-color: #6E8194 !important; }
+        .yuan-bg-legislative { background-color: #94808E !important; }
+        .yuan-bg-judicial    { background-color: #4E5F77 !important; }
+        .yuan-bg-examination { background-color: #9D9077 !important; }
+        .yuan-bg-control     { background-color: #7B8C7B !important; }
+        .yuan-text-executive   { color: #6E8194 !important; }
+        .yuan-text-legislative { color: #94808E !important; }
+        .yuan-text-judicial    { color: #4E5F77 !important; }
+        .yuan-text-examination { color: #9D9077 !important; }
+        .yuan-text-control     { color: #7B8C7B !important; }
+        .yuan-border-executive   { border-color: #6E8194 !important; }
+        .yuan-border-legislative { border-color: #94808E !important; }
+        .yuan-border-judicial    { border-color: #4E5F77 !important; }
+        .yuan-border-examination { border-color: #9D9077 !important; }
+        .yuan-border-control     { border-color: #7B8C7B !important; }
+        .yuan-tint-executive   { background-color: rgba(110,129,148,0.18); }
+        .yuan-tint-legislative { background-color: rgba(148,128,142,0.18); }
+        .yuan-tint-judicial    { background-color: rgba(78,95,119,0.22); }
+        .yuan-tint-examination { background-color: rgba(157,144,119,0.20); }
+        .yuan-tint-control     { background-color: rgba(123,140,123,0.18); }
+
+        /* ── 莫蘭迪亮色主題 ──────────────────────────────────── */
+        :root {
+          --app-overlay: rgba(247, 242, 232, 0.93);
+          --app-card:    #FBF8F2;
+          --app-card-2:  #F2EBDE;
+          --app-card-3:  #FFFFFF;
+          --app-text:    #2D2D2D;
+          --app-text-2:  #5A5A5A;
+          --app-text-3:  #8A8A8A;
+          --app-border:  #D4C9B6;
+          --app-border-soft: #E7DECC;
+          --app-accent:  #9D9077;
+        }
+        .app-overlay      { background-color: var(--app-overlay) !important; }
+        .app-card         { background-color: var(--app-card)   !important; color: var(--app-text) !important; }
+        .app-card-2       { background-color: var(--app-card-2) !important; color: var(--app-text) !important; }
+        .app-card-3       { background-color: var(--app-card-3) !important; color: var(--app-text) !important; }
+        .app-text         { color: var(--app-text) !important; }
+        .app-text-2       { color: var(--app-text-2) !important; }
+        .app-text-3       { color: var(--app-text-3) !important; }
+        .app-border       { border-color: var(--app-border) !important; }
+        .app-border-soft  { border-color: var(--app-border-soft) !important; }
+        .app-accent-bg    { background-color: var(--app-accent) !important; color: #fff !important; }
+        .app-accent-text  { color: var(--app-accent) !important; }
+        .app-accent-border{ border-color: var(--app-accent) !important; }
+        .app-shadow       { box-shadow: 0 8px 28px rgba(80, 65, 40, 0.18); }
     </style>
 </head>
-<body class="text-white overflow-hidden select-none">
+<body class="app-text overflow-hidden select-none">
     <div id="root"></div>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -175,25 +224,24 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-14';
+        const BUILD = '20260517-15';
 
-        // 莫蘭迪色系（依 color.png 設計）
-        // 行政院=藍灰 / 立法院=紫灰 / 司法院=深灰藍 / 考試院=灰棕 / 監察院=灰綠
+        // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
-          { id: 'executive',   name: '行政院', color: 'bg-[#6E8194]', text: 'text-[#A8BACA]' },
-          { id: 'legislative', name: '立法院', color: 'bg-[#94808E]', text: 'text-[#C5A8B4]' },
-          { id: 'judicial',    name: '司法院', color: 'bg-[#4E5F77]', text: 'text-[#8FA0B6]' },
-          { id: 'examination', name: '考試院', color: 'bg-[#9D9077]', text: 'text-[#C4B8A0]' },
-          { id: 'control',     name: '監察院', color: 'bg-[#7B8C7B]', text: 'text-[#A8B7A8]' }
+          { id: 'executive',   name: '行政院', color: 'yuan-bg-executive',   text: 'yuan-text-executive',   border: 'yuan-border-executive',   tint: 'yuan-tint-executive',   hex: '#6E8194' },
+          { id: 'legislative', name: '立法院', color: 'yuan-bg-legislative', text: 'yuan-text-legislative', border: 'yuan-border-legislative', tint: 'yuan-tint-legislative', hex: '#94808E' },
+          { id: 'judicial',    name: '司法院', color: 'yuan-bg-judicial',    text: 'yuan-text-judicial',    border: 'yuan-border-judicial',    tint: 'yuan-tint-judicial',    hex: '#4E5F77' },
+          { id: 'examination', name: '考試院', color: 'yuan-bg-examination', text: 'yuan-text-examination', border: 'yuan-border-examination', tint: 'yuan-tint-examination', hex: '#9D9077' },
+          { id: 'control',     name: '監察院', color: 'yuan-bg-control',     text: 'yuan-text-control',     border: 'yuan-border-control',     tint: 'yuan-tint-control',     hex: '#7B8C7B' }
         ];
 
         // 五院專屬技能卡（每組開局各持有一張）
         const YUAN_EXCLUSIVE_CARDS = {
-          executive:   { id: 'exec', name: '覆議與解散權', desc: '被攻擊時抵銷傷害並反彈；攻擊者為立法院時暫停其一回合', type: 'reactive', rarity: 'text-[#A8BACA]' },
-          legislative: { id: 'leg',  name: '預算刪減權',   desc: '指定其他任一院，直接扣除其 50 分',                        type: 'target',   rarity: 'text-[#C5A8B4]', dmg: 50 },
-          judicial:    { id: 'jud',  name: '違憲宣告權',   desc: '撤銷上回合答對院之所有得分',                              type: 'auto',     rarity: 'text-[#8FA0B6]' },
-          examination: { id: 'exam', name: '銓敘權',       desc: '本回合免疫所有扣分；其他院各繳 10 分方可答題',            type: 'self',     rarity: 'text-[#C4B8A0]' },
-          control:     { id: 'con',  name: '彈劾權',       desc: '指定一院：棄置其一張共同卡，並扣除 20 分',               type: 'target',   rarity: 'text-[#A8B7A8]', dmg: 20 },
+          executive:   { id: 'exec', name: '覆議與解散權', desc: '被攻擊時抵銷傷害並反彈；攻擊者為立法院時暫停其一回合', type: 'reactive', rarity: 'yuan-text-executive' },
+          legislative: { id: 'leg',  name: '預算刪減權',   desc: '指定其他任一院，直接扣除其 50 分',                        type: 'target',   rarity: 'yuan-text-legislative', dmg: 50 },
+          judicial:    { id: 'jud',  name: '違憲宣告權',   desc: '撤銷上回合答對院之所有得分',                              type: 'auto',     rarity: 'yuan-text-judicial' },
+          examination: { id: 'exam', name: '銓敘權',       desc: '本回合免疫所有扣分；其他院各繳 10 分方可答題',            type: 'self',     rarity: 'yuan-text-examination' },
+          control:     { id: 'con',  name: '彈劾權',       desc: '指定一院：棄置其一張共同卡，並扣除 20 分',               type: 'target',   rarity: 'yuan-text-control', dmg: 20 },
         };
 
         // 共同抽牌卡堆（10 種）
@@ -231,44 +279,44 @@
         // ─── 規則說明用資料（直接搬自 rules.html）────────────────
         // 規則 modal 用：每張院專屬卡的色卡（依莫蘭迪色系）
         const RULES_EXCLUSIVE_CARDS = [
-          { yuan:'立法院', color:'border-[#94808E]', textColor:'text-[#C5A8B4]', bgStyle:{ background:'rgba(148,128,142,0.18)' }, dot:'bg-[#94808E]',
+          { yuan:'立法院', color:'yuan-border-legislative', textColor:'yuan-text-legislative', tint:'yuan-tint-legislative', dot:'yuan-bg-legislative',
             name:'預算刪減權',
             desc:'指定其他任一院，直接扣除其 50 分。',
             tip:'高傷害直攻！對方分數高時使用最痛，也可在關鍵局反超排名。',
-            tag:'主動・指定', tagColor:'bg-rose-500/20 text-rose-300' },
-          { yuan:'行政院', color:'border-[#6E8194]', textColor:'text-[#A8BACA]', bgStyle:{ background:'rgba(110,129,148,0.18)' }, dot:'bg-[#6E8194]',
+            tag:'主動・指定', tagColor:'bg-rose-100 text-rose-700' },
+          { yuan:'行政院', color:'yuan-border-executive', textColor:'yuan-text-executive', tint:'yuan-tint-executive', dot:'yuan-bg-executive',
             name:'覆議與解散權',
             desc:'被攻擊時可立即打出，抵銷傷害並將等量分數反彈給攻擊者。若攻擊者為立法院，加碼暫停其搶答一回合。',
             tip:'反制神卡！在倒數期間先打出設置護盾，敵人攻擊即反傷，搭配立法院效果更強。',
-            tag:'被動・反彈', tagColor:'bg-blue-500/20 text-blue-300' },
-          { yuan:'司法院', color:'border-[#4E5F77]', textColor:'text-[#8FA0B6]', bgStyle:{ background:'rgba(78,95,119,0.22)' }, dot:'bg-[#4E5F77]',
+            tag:'被動・反彈', tagColor:'bg-blue-100 text-blue-700' },
+          { yuan:'司法院', color:'yuan-border-judicial', textColor:'yuan-text-judicial', tint:'yuan-tint-judicial', dot:'yuan-bg-judicial',
             name:'違憲宣告權',
             desc:'強制撤銷「上一回合」答對組別在那回合獲得的所有分數。',
             tip:'後發制人！等對方剛答對拿到高分，下一題立刻宣告違憲，讓分數直接蒸發。',
-            tag:'主動・逆轉', tagColor:'bg-amber-500/20 text-amber-300' },
-          { yuan:'監察院', color:'border-[#7B8C7B]', textColor:'text-[#A8B7A8]', bgStyle:{ background:'rgba(123,140,123,0.18)' }, dot:'bg-[#7B8C7B]',
+            tag:'主動・逆轉', tagColor:'bg-amber-100 text-amber-700' },
+          { yuan:'監察院', color:'yuan-border-control', textColor:'yuan-text-control', tint:'yuan-tint-control', dot:'yuan-bg-control',
             name:'彈劾權',
             desc:'指定任一院：棄置對方手中一張共同卡，並扣除對方 20 分。',
             tip:'雙重壓制！讓對方同時失去資源與分數，尤其適合在強勢隊伍即將用牌前打出。',
-            tag:'主動・削弱', tagColor:'bg-rose-500/20 text-rose-300' },
-          { yuan:'考試院', color:'border-[#9D9077]', textColor:'text-[#C4B8A0]', bgStyle:{ background:'rgba(157,144,119,0.18)' }, dot:'bg-[#9D9077]',
+            tag:'主動・削弱', tagColor:'bg-rose-100 text-rose-700' },
+          { yuan:'考試院', color:'yuan-border-examination', textColor:'yuan-text-examination', tint:'yuan-tint-examination', dot:'yuan-bg-examination',
             name:'銓敘權',
             desc:'本回合免疫一切扣分攻擊。此外，本回合其他四院若要答題得分，須各先繳交 10 分給考試院。',
             tip:'守護加課稅！分數危急時自保，同時被動收益。若全場都繳費你可多賺 40 分！',
-            tag:'主動・防護', tagColor:'bg-purple-500/20 text-purple-300' },
+            tag:'主動・防護', tagColor:'bg-purple-100 text-purple-700' },
         ];
 
         const RULES_COMMON_CARDS = [
-          { id:'c01', name:'甲級動員', desc:'下一回合本組享有絕對優先搶答權，不需比手速。若答錯則開放其他組搶答。', tag:'搶答優勢', tagColor:'bg-emerald-500/20 text-emerald-300', emoji:'⚡' },
-          { id:'c02', name:'重大建設', desc:'本回合若搶答正確，得分直接乘以 2（+80 分）。', tag:'得分翻倍', tagColor:'bg-yellow-500/20 text-yellow-300', emoji:'🏗️' },
-          { id:'c03', name:'社會福利', desc:'強制全場分數最高的組別，無條件轉移 20 分給分數最低的組別。', tag:'縮小差距', tagColor:'bg-blue-500/20 text-blue-300', emoji:'🤝' },
-          { id:'c04', name:'機密外洩', desc:'指定一組，直接奪走對方的五院專屬技能卡，納為己用。對方永久失去該技能。', tag:'竊取技能', tagColor:'bg-rose-500/20 text-rose-300', emoji:'🕵️' },
-          { id:'c05', name:'擴權爭議', desc:'隨機從指定一組手中，盲抽一張未使用的共同卡，納為己用。若對方無共同卡則無效。', tag:'竊取資源', tagColor:'bg-orange-500/20 text-orange-300', emoji:'👐' },
-          { id:'c06', name:'輿論炎上', desc:'讓指定一組深陷公關危機，下一回合禁止使用任何技能卡（含院專屬卡）。', tag:'封印技能', tagColor:'bg-red-500/20 text-red-300', emoji:'🔥' },
-          { id:'c07', name:'民意支持', desc:'護身符！可保留在手中。當遭受任何扣分攻擊時立即打出，完全抵銷該次攻擊。', tag:'完全防禦', tagColor:'bg-cyan-500/20 text-cyan-300', emoji:'🛡️' },
-          { id:'c08', name:'朝野協商', desc:'指定另一組強行結盟。下一回合只要對方答題得分，本組免費獲得一半的分數。', tag:'結盟收益', tagColor:'bg-teal-500/20 text-teal-300', emoji:'🤜🤛' },
-          { id:'c09', name:'選區重劃', desc:'全場所有組別必須將選定項目（全部分數 或 全部共同卡）往左邊傳交給下一組。', tag:'全場大亂', tagColor:'bg-violet-500/20 text-violet-300', emoji:'🔄' },
-          { id:'c10', name:'特別預算', desc:'國庫撥款！全場所有組別各加 10 分，本組另外再免費抽 1 張共同卡。', tag:'全場加分', tagColor:'bg-pink-500/20 text-pink-300', emoji:'💰' },
+          { id:'c01', name:'甲級動員', desc:'下一回合本組享有絕對優先搶答權，不需比手速。若答錯則開放其他組搶答。', tag:'搶答優勢', tagColor:'bg-emerald-100 text-emerald-700', emoji:'⚡' },
+          { id:'c02', name:'重大建設', desc:'本回合若搶答正確，得分直接乘以 2（+80 分）。', tag:'得分翻倍', tagColor:'bg-yellow-100 text-yellow-700', emoji:'🏗️' },
+          { id:'c03', name:'社會福利', desc:'強制全場分數最高的組別，無條件轉移 20 分給分數最低的組別。', tag:'縮小差距', tagColor:'bg-blue-100 text-blue-700', emoji:'🤝' },
+          { id:'c04', name:'機密外洩', desc:'指定一組，直接奪走對方的五院專屬技能卡，納為己用。對方永久失去該技能。', tag:'竊取技能', tagColor:'bg-rose-100 text-rose-700', emoji:'🕵️' },
+          { id:'c05', name:'擴權爭議', desc:'隨機從指定一組手中，盲抽一張未使用的共同卡，納為己用。若對方無共同卡則無效。', tag:'竊取資源', tagColor:'bg-orange-100 text-orange-700', emoji:'👐' },
+          { id:'c06', name:'輿論炎上', desc:'讓指定一組深陷公關危機，下一回合禁止使用任何技能卡（含院專屬卡）。', tag:'封印技能', tagColor:'bg-red-100 text-red-700', emoji:'🔥' },
+          { id:'c07', name:'民意支持', desc:'護身符！可保留在手中。當遭受任何扣分攻擊時立即打出，完全抵銷該次攻擊。', tag:'完全防禦', tagColor:'bg-cyan-100 text-cyan-700', emoji:'🛡️' },
+          { id:'c08', name:'朝野協商', desc:'指定另一組強行結盟。下一回合只要對方答題得分，本組免費獲得一半的分數。', tag:'結盟收益', tagColor:'bg-teal-100 text-teal-700', emoji:'🤜🤛' },
+          { id:'c09', name:'選區重劃', desc:'全場所有組別必須將選定項目（全部分數 或 全部共同卡）往左邊傳交給下一組。', tag:'全場大亂', tagColor:'bg-violet-100 text-violet-700', emoji:'🔄' },
+          { id:'c10', name:'特別預算', desc:'國庫撥款！全場所有組別各加 10 分，本組另外再免費抽 1 張共同卡。', tag:'全場加分', tagColor:'bg-pink-100 text-pink-700', emoji:'💰' },
         ];
 
         // 共同卡完整說明（CardRule.txt 原文）
@@ -327,12 +375,12 @@
           const ErrorModal = () => {
             if (!errorMsg) return null;
             return (
-              <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-slate-800 border-4 border-rose-500 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl">
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in" style={{ background:'rgba(60,50,35,0.55)' }}>
+                <div className="app-card-3 border-4 border-rose-400 p-8 rounded-3xl max-w-sm w-full text-center app-shadow">
                   <div className="text-5xl mb-4">⚠️</div>
-                  <h3 className="text-2xl font-black text-white mb-3">系統提示</h3>
-                  <p className="text-slate-300 font-medium mb-8 whitespace-pre-wrap leading-relaxed">{errorMsg}</p>
-                  <button onClick={() => setErrorMsg('')} className="w-full bg-rose-500 text-white font-black text-lg py-4 rounded-xl active:scale-95 transition">
+                  <h3 className="text-2xl font-black app-text mb-3">系統提示</h3>
+                  <p className="app-text-2 font-medium mb-8 whitespace-pre-wrap leading-relaxed">{errorMsg}</p>
+                  <button onClick={() => setErrorMsg('')} className="w-full bg-rose-400 text-white font-black text-lg py-4 rounded-xl active:scale-95 transition">
                     我知道了
                   </button>
                 </div>
@@ -837,10 +885,10 @@
             const visibleCards = myHand.filter(c => c.usedOnQ !== -1);
 
             if (myScore <= 0) return (
-              <div className="mt-4 py-6 rounded-3xl font-black text-2xl bg-slate-700 text-slate-500 text-center">已淘汰</div>
+              <div className="mt-4 py-6 rounded-3xl font-black text-2xl app-card-2 app-text-3 text-center">已淘汰</div>
             );
             if (alreadyWrong) return (
-              <div className="mt-4 py-6 rounded-3xl font-black text-xl bg-slate-800 border-2 border-slate-600 text-slate-400 text-center">
+              <div className="mt-4 py-6 rounded-3xl font-black text-xl app-card border-2 app-border app-text-3 text-center">
                 已答題，等待其他組搶答
               </div>
             );
@@ -848,21 +896,21 @@
             if (timeToOpen > 0) return (
               <div className="mt-2 space-y-2">
                 {/* 倒數 */}
-                <div className="py-2 rounded-2xl bg-slate-700 text-center">
-                  <p className="text-slate-400 text-xs font-bold">搶答倒數</p>
-                  <p className="text-4xl font-black text-white animate-bounce">{timeToOpen}</p>
+                <div className="py-2 rounded-2xl app-card-2 text-center">
+                  <p className="app-text-3 text-xs font-bold">搶答倒數</p>
+                  <p className="text-4xl font-black app-text animate-bounce">{timeToOpen}</p>
                 </div>
 
                 {/* 技能卡面板（倒數時顯示完整說明） */}
                 {visibleCards.length > 0 && (
-                  <div className="rounded-2xl overflow-hidden border border-yellow-500/30 bg-slate-900/95">
-                    <div className="px-3 py-2 border-b border-yellow-500/20">
+                  <div className="rounded-2xl overflow-hidden border app-accent-border app-card">
+                    <div className="px-3 py-2 border-b app-border-soft">
                       {cardBanned ? (
-                        <p className="text-rose-400 text-[10px] font-bold">🚫 被輿論炎上，本題無法發動技能</p>
+                        <p className="text-rose-500 text-[10px] font-bold">🚫 被輿論炎上，本題無法發動技能</p>
                       ) : alreadyPlayedThisRound ? (
-                        <p className="text-slate-500 text-[10px] font-bold">✅ 本題已發動技能卡</p>
+                        <p className="app-text-3 text-[10px] font-bold">✅ 本題已發動技能卡</p>
                       ) : (
-                        <p className="text-yellow-400 text-[10px] font-bold">⚡ 搶答前可發動一張技能卡（每張卡整局限用一次）</p>
+                        <p className="app-accent-text text-[10px] font-bold">⚡ 搶答前可發動一張技能卡（每張卡整局限用一次）</p>
                       )}
                     </div>
 
@@ -878,23 +926,23 @@
                                 padding: '0.5rem 0.625rem',
                                 opacity: canActivate ? 1 : 0.45,
                                 cursor: canActivate ? 'pointer' : 'not-allowed',
-                                background: permanentlyUsed ? 'rgba(30,32,45,0.7)'
-                                  : card.isExclusive ? 'rgba(234,179,8,0.13)' : 'rgba(60,70,100,0.6)',
-                                border: `1px solid ${permanentlyUsed ? '#1e2035' : card.isExclusive ? 'rgba(234,179,8,0.4)' : '#3f4d6e'}`,
+                                background: permanentlyUsed ? 'rgba(180,170,150,0.25)'
+                                  : card.isExclusive ? 'rgba(212,180,131,0.20)' : 'rgba(110,129,148,0.18)',
+                                border: `1px solid ${permanentlyUsed ? '#C8BCA6' : card.isExclusive ? 'rgba(212,180,131,0.55)' : 'rgba(110,129,148,0.55)'}`,
                               }}>
                               <div className="flex-1 min-w-0">
-                                <p className={`text-xs font-black leading-tight ${permanentlyUsed ? 'line-through text-slate-600' : card.isExclusive ? 'text-yellow-300' : 'text-white'}`}>
+                                <p className={`text-xs font-black leading-tight ${permanentlyUsed ? 'line-through app-text-3' : card.isExclusive ? 'app-accent-text' : 'app-text'}`}>
                                   {card.isExclusive ? '⭐' : '🃏'} {card.name}
-                                  {permanentlyUsed && <span className="ml-1 text-[9px] font-normal no-underline text-rose-700"> 已使用</span>}
+                                  {permanentlyUsed && <span className="ml-1 text-[9px] font-normal no-underline text-rose-600"> 已使用</span>}
                                 </p>
                                 {!permanentlyUsed && (
-                                  <p className="text-[9px] text-slate-400 leading-snug mt-0.5" style={{ display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+                                  <p className="text-[9px] app-text-3 leading-snug mt-0.5" style={{ display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
                                     {card.desc}
                                   </p>
                                 )}
                               </div>
                               {canActivate && (
-                                <span className="shrink-0 text-[10px] font-black text-yellow-300 bg-yellow-500/20 px-1.5 py-0.5 rounded self-center">發動</span>
+                                <span className="shrink-0 text-[10px] font-black app-accent-text px-1.5 py-0.5 rounded self-center" style={{ background:'rgba(157,144,119,0.20)' }}>發動</span>
                               )}
                             </button>
                           );
@@ -917,19 +965,19 @@
           // ── 規則說明 Modal（rules.html 完整移植） ──────────────
           if (showRules) {
             return (
-              <div className="h-full flex flex-col bg-black/60 text-white overflow-hidden">
+              <div className="h-full flex flex-col app-overlay app-text overflow-hidden">
                 {/* 頂欄 + 分頁 */}
-                <div className="shrink-0 bg-slate-900/95 border-b border-slate-700 shadow-lg" style={{ backdropFilter:'blur(8px)' }}>
+                <div className="shrink-0 app-card-2 border-b app-border shadow-lg" style={{ backdropFilter:'blur(8px)' }}>
                   <div className="flex items-center gap-3 px-4 py-3">
                     <button onClick={() => setShowRules(false)}
-                      className="bg-slate-700 active:scale-95 px-4 py-2 rounded-full text-sm font-bold transition">← 返回</button>
+                      className="app-card-2 active:scale-95 px-4 py-2 rounded-full text-sm font-bold transition">← 返回</button>
                     <h1 className="font-black text-lg">五院大亂鬥 — 遊戲說明</h1>
                   </div>
                   <div className="flex px-4 gap-6 overflow-x-auto">
                     {[{label:'📋 遊戲規則'},{label:'⭐ 院專屬卡'},{label:'🎴 共同卡牌'}].map((t,i) => (
                       <button key={i} onClick={() => setRulesTab(i)}
                         className={`text-sm font-bold py-2 whitespace-nowrap transition`}
-                        style={{ borderBottom:'3px solid', borderColor: rulesTab===i ? '#facc15' : 'transparent', color: rulesTab===i ? '#facc15' : '#94a3b8' }}>
+                        style={{ borderBottom:'3px solid', borderColor: rulesTab===i ? '#9D9077' : 'transparent', color: rulesTab===i ? '#9D9077' : '#888888' }}>
                         {t.label}
                       </button>
                     ))}
@@ -943,47 +991,47 @@
                     {/* ── Tab 0: 遊戲規則 ── */}
                     {rulesTab === 0 && (
                       <div>
-                        <h2 className="text-xl font-black text-yellow-400 mb-4">基本流程</h2>
+                        <h2 className="text-xl font-black app-accent-text mb-4">基本流程</h2>
                         <div className="space-y-3 mb-8">
-                          <div className="bg-slate-800/90 rounded-2xl p-5 border-l-4 border-yellow-400 animate-fade-in">
+                          <div className="app-card border app-border rounded-2xl p-5 border-l-4 border-yellow-400 animate-fade-in">
                             <div className="flex gap-4 items-start">
-                              <span className="text-3xl font-black text-yellow-400 shrink-0 leading-none">1</span>
+                              <span className="text-3xl font-black app-accent-text shrink-0 leading-none">1</span>
                               <div>
-                                <p className="font-black text-white mb-1">選擇陣營，持有技能卡</p>
-                                <p className="text-slate-300 text-sm leading-relaxed">
-                                  各組選擇五院之一，持有一張<span className="text-yellow-300 font-bold">院專屬技能卡</span>，並從牌堆隨機抽取一張<span className="text-purple-300 font-bold">共同技能卡</span>。
+                                <p className="font-black app-text mb-1">選擇陣營，持有技能卡</p>
+                                <p className="app-text-2 text-sm leading-relaxed">
+                                  各組選擇五院之一，持有一張<span className="app-accent-text font-bold">院專屬技能卡</span>，並從牌堆隨機抽取一張<span className="text-purple-700 font-bold">共同技能卡</span>。
                                 </p>
                               </div>
                             </div>
                           </div>
-                          <div className="bg-slate-800/90 rounded-2xl p-5 border-l-4 border-emerald-400 animate-fade-in" style={{animationDelay:'80ms'}}>
+                          <div className="app-card border app-border rounded-2xl p-5 border-l-4 border-emerald-400 animate-fade-in" style={{animationDelay:'80ms'}}>
                             <div className="flex gap-4 items-start">
                               <span className="text-3xl font-black text-emerald-400 shrink-0 leading-none">2</span>
                               <div>
-                                <p className="font-black text-white mb-1">搶答得分</p>
-                                <p className="text-slate-300 text-sm leading-relaxed">
+                                <p className="font-black app-text mb-1">搶答得分</p>
+                                <p className="app-text-2 text-sm leading-relaxed">
                                   答對 <span className="text-emerald-400 font-black">+40 分</span>，答錯 <span className="text-rose-400 font-black">-15 分</span>。分數歸零後淘汰，無法再搶答。
                                 </p>
                               </div>
                             </div>
                           </div>
-                          <div className="bg-slate-800/90 rounded-2xl p-5 border-l-4 border-amber-400 animate-fade-in" style={{animationDelay:'160ms'}}>
+                          <div className="app-card border app-border rounded-2xl p-5 border-l-4 border-amber-400 animate-fade-in" style={{animationDelay:'160ms'}}>
                             <div className="flex gap-4 items-start">
                               <span className="text-3xl font-black text-amber-400 shrink-0 leading-none">3</span>
                               <div>
-                                <p className="font-black text-white mb-1">發動技能卡</p>
-                                <p className="text-slate-300 text-sm leading-relaxed">
+                                <p className="font-black app-text mb-1">發動技能卡</p>
+                                <p className="app-text-2 text-sm leading-relaxed">
                                   每題搶答<span className="text-amber-300 font-bold">倒數 5 秒</span>期間，可發動一張技能卡（每回合限一張）。<span className="text-rose-300 font-bold">按下搶答後不可再出牌</span>。
                                 </p>
                               </div>
                             </div>
                           </div>
-                          <div className="bg-slate-800/90 rounded-2xl p-5 border-l-4 border-blue-400 animate-fade-in" style={{animationDelay:'240ms'}}>
+                          <div className="app-card border app-border rounded-2xl p-5 border-l-4 border-blue-400 animate-fade-in" style={{animationDelay:'240ms'}}>
                             <div className="flex gap-4 items-start">
                               <span className="text-3xl font-black text-blue-400 shrink-0 leading-none">4</span>
                               <div>
-                                <p className="font-black text-white mb-1">結算順序</p>
-                                <p className="text-slate-300 text-sm leading-relaxed">
+                                <p className="font-black app-text mb-1">結算順序</p>
+                                <p className="app-text-2 text-sm leading-relaxed">
                                   同一回合多人出牌，依照發動順序依序結算效果。所有效果對所有玩家可見。
                                 </p>
                               </div>
@@ -991,51 +1039,51 @@
                           </div>
                         </div>
 
-                        <h2 className="text-xl font-black text-yellow-400 mb-4">分數系統</h2>
-                        <div className="bg-slate-800/90 rounded-2xl p-5 mb-8 animate-fade-in">
+                        <h2 className="text-xl font-black app-accent-text mb-4">分數系統</h2>
+                        <div className="app-card border app-border rounded-2xl p-5 mb-8 animate-fade-in">
                           <div className="grid grid-cols-3 gap-3 text-center">
-                            <div className="bg-slate-900 rounded-xl p-3">
-                              <p className="text-slate-400 text-xs mb-1">開局分數</p>
-                              <p className="text-2xl font-black text-white">100</p>
-                              <p className="text-slate-500 text-xs">分</p>
+                            <div className="app-card-2 rounded-xl p-3">
+                              <p className="app-text-3 text-xs mb-1">開局分數</p>
+                              <p className="text-2xl font-black app-text">100</p>
+                              <p className="app-text-3 text-xs">分</p>
                             </div>
-                            <div className="bg-emerald-900/50 rounded-xl p-3">
-                              <p className="text-slate-400 text-xs mb-1">答對</p>
-                              <p className="text-2xl font-black text-emerald-400">+40</p>
-                              <p className="text-slate-500 text-xs">分</p>
+                            <div className="bg-emerald-100 rounded-xl p-3">
+                              <p className="app-text-3 text-xs mb-1">答對</p>
+                              <p className="text-2xl font-black text-emerald-700">+40</p>
+                              <p className="app-text-3 text-xs">分</p>
                             </div>
-                            <div className="bg-rose-900/50 rounded-xl p-3">
-                              <p className="text-slate-400 text-xs mb-1">答錯</p>
-                              <p className="text-2xl font-black text-rose-400">-15</p>
-                              <p className="text-slate-500 text-xs">分</p>
+                            <div className="bg-rose-100 rounded-xl p-3">
+                              <p className="app-text-3 text-xs mb-1">答錯</p>
+                              <p className="text-2xl font-black text-rose-700">-15</p>
+                              <p className="app-text-3 text-xs">分</p>
                             </div>
                           </div>
-                          <div className="mt-3 bg-slate-900 rounded-xl p-3 text-center">
-                            <p className="text-slate-400 text-xs">分數歸零 → <span className="text-rose-400 font-bold">淘汰</span>，無法再搶答</p>
+                          <div className="mt-3 app-card-2 rounded-xl p-3 text-center">
+                            <p className="app-text-3 text-xs">分數歸零 → <span className="text-rose-400 font-bold">淘汰</span>，無法再搶答</p>
                           </div>
                         </div>
 
-                        <h2 className="text-xl font-black text-yellow-400 mb-4">搶答流程</h2>
-                        <div className="bg-slate-800/90 rounded-2xl p-5 animate-fade-in">
+                        <h2 className="text-xl font-black app-accent-text mb-4">搶答流程</h2>
+                        <div className="app-card border app-border rounded-2xl p-5 animate-fade-in">
                           <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-3">
                               <span className="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center text-xs font-black shrink-0">1</span>
-                              <p className="text-sm text-slate-300">新題目出現，<span className="text-amber-300 font-bold">5 秒倒數</span>開始（此時可發動技能卡）</p>
+                              <p className="text-sm app-text-2">新題目出現，<span className="text-amber-300 font-bold">5 秒倒數</span>開始（此時可發動技能卡）</p>
                             </div>
                             <div className="w-px h-3 bg-slate-600 ml-3.5"></div>
                             <div className="flex items-center gap-3">
                               <span className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-black shrink-0">2</span>
-                              <p className="text-sm text-slate-300">倒數結束 → <span className="text-emerald-300 font-bold">搶答開放</span>，拼手速按搶答</p>
+                              <p className="text-sm app-text-2">倒數結束 → <span className="text-emerald-300 font-bold">搶答開放</span>，拼手速按搶答</p>
                             </div>
                             <div className="w-px h-3 bg-slate-600 ml-3.5"></div>
                             <div className="flex items-center gap-3">
                               <span className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-xs font-black shrink-0">3</span>
-                              <p className="text-sm text-slate-300">搶到者有 <span className="text-blue-300 font-bold">10 秒</span>回答，超時視為答錯</p>
+                              <p className="text-sm app-text-2">搶到者有 <span className="text-blue-300 font-bold">10 秒</span>回答，超時視為答錯</p>
                             </div>
                             <div className="w-px h-3 bg-slate-600 ml-3.5"></div>
                             <div className="flex items-center gap-3">
                               <span className="w-7 h-7 rounded-full bg-purple-500 flex items-center justify-center text-xs font-black shrink-0">4</span>
-                              <p className="text-sm text-slate-300">答錯後其他存活組別可再搶答，答對才進下一題</p>
+                              <p className="text-sm app-text-2">答錯後其他存活組別可再搶答，答對才進下一題</p>
                             </div>
                           </div>
                         </div>
@@ -1045,7 +1093,7 @@
                     {/* ── Tab 1: 院專屬卡 ── */}
                     {rulesTab === 1 && (
                       <div>
-                        <p className="text-slate-400 text-sm mb-5">每組開局持有，強大且獨特。點擊卡片可翻面查看使用時機。</p>
+                        <p className="app-text-3 text-sm mb-5">每組開局持有，強大且獨特。點擊卡片可翻面查看使用時機。</p>
                         <div className="space-y-4">
                           {RULES_EXCLUSIVE_CARDS.map((c, i) => {
                             const flipped = !!flippedCards[c.yuan];
@@ -1055,7 +1103,7 @@
                                 onClick={() => { sound.draw(); setFlippedCards(p => ({...p, [c.yuan]: !p[c.yuan]})); }}>
                                 <div className={`flip-inner${flipped ? ' is-flipped' : ''}`} style={{ minHeight:'200px' }}>
                                   {/* 正面 */}
-                                  <div className={`flip-face ${c.color}`} style={{ borderWidth:'2px', borderStyle:'solid', ...c.bgStyle }}>
+                                  <div className={`flip-face ${c.color} ${c.tint}`} style={{ borderWidth:'2px', borderStyle:'solid' }}>
                                     <div className="flex items-start justify-between gap-3">
                                       <div>
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1063,17 +1111,17 @@
                                           <span className={`${c.textColor} text-xs font-bold`}>{c.yuan} 專屬</span>
                                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${c.tagColor}`}>{c.tag}</span>
                                         </div>
-                                        <h3 className="text-lg font-black text-white mb-2">【{c.name}】</h3>
-                                        <p className="text-slate-300 text-sm leading-relaxed">{c.desc}</p>
+                                        <h3 className="text-lg font-black app-text mb-2">【{c.name}】</h3>
+                                        <p className="app-text-2 text-sm leading-relaxed">{c.desc}</p>
                                       </div>
                                     </div>
-                                    <p className="text-[10px] text-slate-500 mt-3 text-right">點擊查看使用時機 →</p>
+                                    <p className="text-[10px] app-text-3 mt-3 text-right">點擊查看使用時機 →</p>
                                   </div>
                                   {/* 背面 */}
-                                  <div className={`flip-face flip-back-face ${c.color} flex flex-col justify-center`} style={{ borderWidth:'2px', borderStyle:'solid', ...c.bgStyle }}>
-                                    <p className="text-xs font-black text-yellow-400 mb-3">💡 使用時機</p>
-                                    <p className="text-slate-200 text-sm leading-relaxed">{c.tip}</p>
-                                    <p className="text-[10px] text-slate-500 mt-4 text-right">← 點擊返回</p>
+                                  <div className={`flip-face flip-back-face ${c.color} ${c.tint} flex flex-col justify-center`} style={{ borderWidth:'2px', borderStyle:'solid' }}>
+                                    <p className={`text-xs font-black ${c.textColor} mb-3`}>💡 使用時機</p>
+                                    <p className="app-text text-sm leading-relaxed">{c.tip}</p>
+                                    <p className="text-[10px] app-text-3 mt-4 text-right">← 點擊返回</p>
                                   </div>
                                 </div>
                               </div>
@@ -1086,19 +1134,19 @@
                     {/* ── Tab 2: 共同卡牌 ── */}
                     {rulesTab === 2 && (
                       <div>
-                        <p className="text-slate-400 text-sm mb-5">開局隨機抽得一張，部分效果可讓你再抽。靈活使用改變局勢！</p>
+                        <p className="app-text-2 text-sm mb-5">開局隨機抽得一張，部分效果可讓你再抽。靈活使用改變局勢！</p>
                         <div className="space-y-3">
                           {RULES_COMMON_CARDS.map((c, i) => (
-                            <div key={c.id} className="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 animate-fade-in"
+                            <div key={c.id} className="app-card app-border rounded-2xl p-4 animate-fade-in border"
                               style={{ animationDelay:`${i*50}ms` }}>
                               <div className="flex gap-3 items-start">
                                 <span className="text-2xl shrink-0 leading-none mt-0.5">{c.emoji}</span>
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                                    <h3 className="text-base font-black text-white">【{c.name}】</h3>
+                                    <h3 className="text-base font-black app-text">【{c.name}】</h3>
                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${c.tagColor}`}>{c.tag}</span>
                                   </div>
-                                  <p className="text-slate-300 text-sm leading-relaxed">{c.desc}</p>
+                                  <p className="app-text-2 text-sm leading-relaxed">{c.desc}</p>
                                 </div>
                               </div>
                             </div>
@@ -1115,43 +1163,43 @@
 
           // ── 畫面分支 ──────────────────────────────────────────
 
-          if (isConnecting) return <div className="h-full flex items-center justify-center font-bold bg-black/60">連線中...</div>;
+          if (isConnecting) return <div className="h-full flex items-center justify-center font-bold app-overlay">連線中...</div>;
 
           if (!roomCode) return (
-            <div className="h-full flex flex-col items-center justify-center p-6 space-y-6 bg-black/50">
+            <div className="h-full flex flex-col items-center justify-center p-6 space-y-6 app-overlay">
               <ErrorModal />
               <h1 className="text-4xl font-black">五院大亂鬥</h1>
-              <p className="text-slate-600 font-mono text-[10px]">Build: {BUILD}</p>
-              <div className="w-full max-w-sm bg-slate-800 p-6 rounded-3xl border-2 border-slate-700 shadow-xl space-y-4">
+              <p className="app-text-3 font-mono text-[10px]">Build: {BUILD}</p>
+              <div className="w-full max-w-sm app-card p-6 rounded-3xl border-2 app-border shadow-xl space-y-4">
                 <button onClick={createRoom} className="w-full bg-emerald-500 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">建立房間 (老師)</button>
-                <div className="h-px bg-slate-700"></div>
-                <input value={joinInput} onChange={e => setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="輸入 4 碼代碼" className="w-full bg-slate-900 p-5 rounded-2xl text-center text-2xl font-bold border-2 border-slate-600 focus:border-blue-500 outline-none" />
-                <button onClick={joinRoom} disabled={joinInput.length !== 4} className="w-full bg-blue-500 disabled:bg-slate-600 disabled:text-slate-400 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">加入遊戲 (學生)</button>
+                <div className="h-px app-card-2"></div>
+                <input value={joinInput} onChange={e => setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="輸入 4 碼代碼" className="w-full app-card-2 p-5 rounded-2xl text-center text-2xl font-bold border-2 app-border focus:border-blue-500 outline-none" />
+                <button onClick={joinRoom} disabled={joinInput.length !== 4} className="w-full bg-blue-500 text-white disabled:bg-stone-300 disabled:text-stone-500 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">加入遊戲 (學生)</button>
               </div>
               <button onClick={() => { setShowRules(true); setRulesTab(0); }}
-                className="text-slate-400 text-sm font-bold underline underline-offset-4 active:opacity-70">
+                className="app-text-3 text-sm font-bold underline underline-offset-4 active:opacity-70">
                 📖 遊戲說明 / 技能卡效果
               </button>
             </div>
           );
 
-          if (!roomData) return <div className="h-full flex items-center justify-center animate-pulse text-xl bg-black/60">載入資料中...</div>;
+          if (!roomData) return <div className="h-full flex items-center justify-center animate-pulse text-xl app-overlay">載入資料中...</div>;
 
           if (syncCountdown !== null && syncCountdown > 0) return (
-            <div className="h-full bg-blue-900/90 flex flex-col items-center justify-center p-10">
-              <h2 className="text-2xl font-bold mb-10 text-blue-200">準備開始...</h2>
-              <h1 className="text-[12rem] font-black animate-countdown">{syncCountdown}</h1>
-              <p className="mt-10 text-xl font-bold">正在同步所有玩家網路速度</p>
+            <div className="h-full app-overlay flex flex-col items-center justify-center p-10">
+              <h2 className="text-2xl font-bold mb-10 app-accent-text">準備開始...</h2>
+              <h1 className="text-[12rem] font-black animate-countdown app-text">{syncCountdown}</h1>
+              <p className="mt-10 text-xl font-bold app-text-2">正在同步所有玩家網路速度</p>
             </div>
           );
 
           if (roomData.state === 'lobby') return (
-            <div className="h-full flex flex-col items-center justify-center p-6 bg-black/55 relative">
+            <div className="h-full flex flex-col items-center justify-center p-6 app-overlay relative">
               <ErrorModal />
-              <button onClick={leaveRoom} className="absolute top-6 right-6 text-slate-400 bg-slate-800 px-4 py-2 rounded-full text-sm font-bold active:scale-95 transition">離開</button>
-              <button onClick={() => { setShowRules(true); setRulesTab(0); }} className="absolute top-6 left-6 text-slate-400 bg-slate-800 px-3 py-2 rounded-full text-xs font-bold active:scale-95 transition">📖 規則</button>
-              <div className="bg-slate-800 p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm sm:max-w-md">
-                <h2 className="text-slate-400 text-lg font-bold">房間代碼：</h2>
+              <button onClick={leaveRoom} className="absolute top-6 right-6 app-text-3 app-card px-4 py-2 rounded-full text-sm font-bold active:scale-95 transition">離開</button>
+              <button onClick={() => { setShowRules(true); setRulesTab(0); }} className="absolute top-6 left-6 app-text-3 app-card px-3 py-2 rounded-full text-xs font-bold active:scale-95 transition">📖 規則</button>
+              <div className="app-card p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm sm:max-w-md">
+                <h2 className="app-text-3 text-lg font-bold">房間代碼：</h2>
                 <h1 className="text-6xl font-black tracking-widest my-6 select-all">{roomCode}</h1>
                 {myRole === 'host' ? (
                   <div>
@@ -1161,9 +1209,9 @@
                         const offline = t.joined && hb > 0 && (Date.now() - hb) > 60000;
                         return (
                           <span key={t.id} className={`px-3 py-1.5 rounded-full font-bold text-xs border-2
-                            ${offline ? 'bg-rose-900 border-rose-500 text-rose-300'
+                            ${offline ? 'bg-rose-100 border-rose-400 text-rose-700'
                               : t.joined ? `${t.yuan?.color} border-transparent text-white`
-                              : 'bg-slate-900 border-slate-600 text-slate-500'}`}>
+                              : 'app-card-2 app-border app-text-3'}`}>
                             {t.yuan?.name} {offline ? '⚠ 斷線' : t.joined ? '✓ 已連線' : '等待中'}
                           </span>
                         );
@@ -1173,12 +1221,12 @@
                   </div>
                 ) : !myRole ? (
                   <div>
-                  <p className="text-white font-bold text-lg mb-4">請選擇你的陣營</p>
+                  <p className="app-text font-bold text-lg mb-4">請選擇你的陣營</p>
                   <div className="grid grid-cols-2 gap-3">
                     {Object.values(roomData.teams).map(t => (
                       <button key={t.id} onClick={() => handleGroupSelect(t)} disabled={t.joined}
                         className={`p-4 rounded-xl font-black text-sm transition text-white
-                          ${t.joined ? 'bg-slate-700 text-slate-500 opacity-50' : `${t.yuan?.color} active:scale-95`}`}>
+                          ${t.joined ? 'app-card-2 app-text-3 opacity-50' : `${t.yuan?.color} active:scale-95`}`}>
                         {t.yuan?.name}
                       </button>
                     ))}
@@ -1191,35 +1239,35 @@
 
               {/* ── 選院確認 Modal ── */}
               {pendingGroup && (
-                <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 overflow-auto animate-fade-in">
-                  <div className="bg-slate-900 rounded-3xl border-4 border-yellow-400 p-6 max-w-xs w-full space-y-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto animate-fade-in" style={{ background:'rgba(60,50,35,0.55)' }}>
+                  <div className="app-card-3 rounded-3xl border-4 app-accent-border p-6 max-w-xs w-full space-y-4 app-shadow">
                     <div className="text-center">
-                      <p className="text-slate-400 text-sm">你選擇了</p>
+                      <p className="app-text-3 text-sm">你選擇了</p>
                       <h2 className={`text-2xl font-black ${pendingGroup.team.yuan?.text}`}>{pendingGroup.team.yuan?.name}</h2>
                     </div>
 
                     {/* 院專屬技能卡 */}
-                    <div className={`rounded-2xl p-4 border-2 border-yellow-500 bg-yellow-500/10`}>
-                      <p className="text-[10px] text-yellow-400 font-bold mb-1">⭐ 院專屬技能卡（開局持有）</p>
+                    <div className="rounded-2xl p-4 border-2 app-accent-border" style={{ background:'rgba(212,180,131,0.18)' }}>
+                      <p className="text-[10px] app-accent-text font-bold mb-1">⭐ 院專屬技能卡（開局持有）</p>
                       <p className={`text-base font-black mb-2 ${pendingGroup.team.yuan?.text}`}>
                         【{pendingGroup.excCard?.name}】
                       </p>
-                      <p className="text-xs text-slate-300 leading-relaxed">{pendingGroup.excCard?.desc}</p>
+                      <p className="text-xs app-text-2 leading-relaxed">{pendingGroup.excCard?.desc}</p>
                     </div>
 
                     {/* 共同卡抽取 */}
                     {!cardRevealed ? (
                       <button onClick={() => { sound.draw(); setCardRevealed(true); }}
-                        className="w-full bg-purple-600 text-white py-4 rounded-2xl font-black text-base active:scale-95 transition animate-pulse">
+                        className="w-full bg-purple-500 text-white py-4 rounded-2xl font-black text-base active:scale-95 transition animate-pulse">
                         🎴 抽取共同技能卡
                       </button>
                     ) : (
-                      <div className="rounded-2xl p-4 border-2 border-purple-400 bg-purple-500/10 animate-fade-in">
-                        <p className="text-[10px] text-purple-400 font-bold mb-1">🎴 隨機共同技能卡</p>
-                        <p className="text-base font-black text-white mb-2">
+                      <div className="rounded-2xl p-4 border-2 border-purple-400 animate-fade-in" style={{ background:'rgba(168,128,200,0.14)' }}>
+                        <p className="text-[10px] text-purple-700 font-bold mb-1">🎴 隨機共同技能卡</p>
+                        <p className="text-base font-black app-text mb-2">
                           【{pendingGroup.comCard?.name}】
                         </p>
-                        <p className="text-xs text-slate-300 leading-relaxed">{pendingGroup.comCard?.desc}</p>
+                        <p className="text-xs app-text-2 leading-relaxed">{pendingGroup.comCard?.desc}</p>
                       </div>
                     )}
 
@@ -1231,7 +1279,7 @@
                     )}
                     {!cardRevealed && (
                       <button onClick={() => { setPendingGroup(null); setCardRevealed(false); }}
-                        className="w-full text-slate-500 text-sm py-2 active:opacity-70">
+                        className="w-full app-text-3 text-sm py-2 active:opacity-70">
                         ← 返回重選
                       </button>
                     )}
@@ -1242,29 +1290,29 @@
           );
 
           if (roomData.state === 'end') return (
-            <div className="h-full flex flex-col items-center justify-center p-6 bg-black/55 animate-fade-in">
+            <div className="h-full flex flex-col items-center justify-center p-6 app-overlay animate-fade-in">
               <ErrorModal />
-              <div className="bg-slate-800 p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm">
+              <div className="app-card p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm">
                 <div className="text-6xl mb-4">👑</div>
-                <h2 className="text-3xl font-black text-yellow-400 mb-6">戰鬥結束！</h2>
+                <h2 className="text-3xl font-black app-accent-text mb-6">戰鬥結束！</h2>
                 <div className="space-y-2 mb-8 text-left">
                   {Object.values(roomData.teams)
                     .sort((a, b) => (roomData.scores?.[b.id] ?? 0) - (roomData.scores?.[a.id] ?? 0))
                     .map((t, idx) => (
-                      <div key={t.id} className="flex justify-between items-center bg-slate-900 px-4 py-3 rounded-xl">
+                      <div key={t.id} className="flex justify-between items-center app-card-2 px-4 py-3 rounded-xl">
                         <span className="font-black flex items-center gap-2">
-                          <span className="text-slate-500 text-sm w-4">{idx + 1}.</span>
+                          <span className="app-text-3 text-sm w-4">{idx + 1}.</span>
                           <span className={t.yuan?.text}>{t.yuan?.name}</span>
-                          <span className="text-slate-500 text-xs">{t.name}</span>
+                          <span className="app-text-3 text-xs">{t.name}</span>
                         </span>
-                        <span className={`font-black ${(roomData.scores?.[t.id] ?? 0) > 0 ? 'text-yellow-400' : 'text-rose-500'}`}>{roomData.scores?.[t.id] ?? 0} 分</span>
+                        <span className={`font-black ${(roomData.scores?.[t.id] ?? 0) > 0 ? 'app-accent-text' : 'text-rose-500'}`}>{roomData.scores?.[t.id] ?? 0} 分</span>
                       </div>
                     ))}
                 </div>
                 {myRole === 'host' ? (
                   <button onClick={resetGame} className="w-full bg-white text-black py-4 rounded-full font-black text-lg active:scale-95 transition">重置房間，再戰一局</button>
                 ) : (
-                  <p className="text-slate-400 font-bold animate-pulse">等待老師重置遊戲...</p>
+                  <p className="app-text-3 font-bold animate-pulse">等待老師重置遊戲...</p>
                 )}
               </div>
             </div>
@@ -1276,7 +1324,7 @@
           const buzzIsOpen = timeToOpen === 0;
 
           return (
-            <div className="h-full flex flex-col font-sans overflow-hidden bg-black/55">
+            <div className="h-full flex flex-col font-sans overflow-hidden app-overlay">
               <ErrorModal />
 
               {/* ── 技能發動全域遮罩（遮住題目，所有人可見） ── */}
@@ -1287,19 +1335,18 @@
                 const playerTeam = roomData.teams[ov.playerGroup];
                 const targetTeam = ov.targetGroup ? roomData.teams[ov.targetGroup] : null;
                 return (
-                  <div className={`fixed inset-0 z-[80] flex flex-col items-center justify-center safe-overlay animate-fade-in overflow-y-auto
-                    ${isTarget ? 'bg-red-950' : 'bg-slate-950'}`}
-                    style={{ backgroundColor: isTarget ? 'rgba(60,0,0,0.97)' : 'rgba(2,6,23,0.97)',
-                             border: isTarget ? '4px solid #ef4444' : '4px solid #334155',
+                  <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center safe-overlay animate-fade-in overflow-y-auto"
+                    style={{ backgroundColor: isTarget ? 'rgba(252,232,232,0.97)' : 'rgba(247,242,232,0.97)',
+                             border: isTarget ? '4px solid #E27A7A' : '4px solid #D4C9B6',
                              WebkitOverflowScrolling: 'touch' }}>
 
                   {/* 被攻擊者專屬：大字提示 */}
                   {isTarget && (
                     <div className="mb-4 text-center">
                       <div className="text-6xl mb-2" style={{animation:'bounce 0.6s infinite'}}>⚔️</div>
-                      <p className="text-red-400 text-3xl font-black">你被攻擊了！</p>
+                      <p className="text-rose-700 text-3xl font-black">你被攻擊了！</p>
                       {ov.targetDelta !== null && ov.targetDelta !== undefined && (
-                        <p className="text-red-300 text-5xl font-black mt-2">{ov.targetDelta} 分</p>
+                        <p className="text-rose-600 text-5xl font-black mt-2">{ov.targetDelta} 分</p>
                       )}
                     </div>
                   )}
@@ -1308,44 +1355,44 @@
                   {!isTarget && !isPlayer && (
                     <div className="mb-4 text-center">
                       <div className="text-5xl mb-2">⚡</div>
-                      <p className={`text-2xl font-black ${playerTeam?.yuan?.text || 'text-white'}`}>{ov.yuanName}</p>
-                      <p className="text-slate-300 text-lg font-bold mt-1">正在發動技能中...</p>
-                      <p className="text-slate-500 text-xs mt-1">時間暫停，請稍候</p>
+                      <p className={`text-2xl font-black ${playerTeam?.yuan?.text || 'app-text'}`}>{ov.yuanName}</p>
+                      <p className="app-text text-lg font-bold mt-1">正在發動技能中...</p>
+                      <p className="app-text-3 text-xs mt-1">時間暫停，請稍候</p>
                     </div>
                   )}
 
                   {/* 發動者資訊（被攻擊者 / 發動者自己 用的小標） */}
                   {(isTarget || isPlayer) && (
-                    <p className="text-slate-400 text-sm mb-0.5">⚡ 技能發動！</p>
+                    <p className="app-text-2 text-sm mb-0.5">⚡ 技能發動！</p>
                   )}
                   {(isTarget || isPlayer) && (
-                    <p className={`text-xl font-black mb-3 ${playerTeam?.yuan?.text || 'text-white'}`}>
+                    <p className={`text-xl font-black mb-3 ${playerTeam?.yuan?.text || 'app-text'}`}>
                       {ov.yuanName}
                     </p>
                   )}
 
                   {/* 卡牌框 */}
                   <div className="rounded-2xl p-4 text-center w-full max-w-xs mb-3"
-                    style={{ background: 'rgba(234,179,8,0.12)', border: '2px solid rgba(234,179,8,0.7)' }}>
-                    <p className="text-yellow-400 text-xs font-bold mb-1">技能卡</p>
-                    <p className="text-xl font-black text-white mb-2">【{ov.cardName}】</p>
-                    <p className="text-sm text-slate-300 leading-relaxed">{ov.cardDesc}</p>
+                    style={{ background: 'rgba(212,180,131,0.20)', border: '2px solid #C9A574' }}>
+                    <p className="app-accent-text text-xs font-bold mb-1">技能卡</p>
+                    <p className="text-xl font-black app-text mb-2">【{ov.cardName}】</p>
+                    <p className="text-sm app-text-2 leading-relaxed">{ov.cardDesc}</p>
                   </div>
 
                   {/* 目標 */}
                   {targetTeam && !isTarget && (
                     <div className="flex items-center gap-2 px-4 py-2 rounded-xl mb-2"
-                      style={{ background: 'rgba(51,65,85,0.8)' }}>
-                      <span className="text-slate-400 text-xs">攻擊目標：</span>
+                      style={{ background: 'rgba(212,201,182,0.55)' }}>
+                      <span className="app-text-2 text-xs">攻擊目標：</span>
                       <span className={`font-black text-base ${targetTeam.yuan?.text}`}>{ov.targetYuanName}</span>
                       {ov.targetDelta !== null && ov.targetDelta !== undefined && (
-                        <span className="text-red-400 font-black">{ov.targetDelta} 分</span>
+                        <span className="text-rose-600 font-black">{ov.targetDelta} 分</span>
                       )}
                     </div>
                   )}
 
-                  {isPlayer && <p className="text-slate-500 text-xs mt-1">技能效果將在 5 秒後結束</p>}
-                  <p className="text-slate-600 text-xs text-center max-w-xs mt-1">{ov.log}</p>
+                  {isPlayer && <p className="app-text-3 text-xs mt-1">技能效果將在 5 秒後結束</p>}
+                  <p className="app-text-3 text-xs text-center max-w-xs mt-1">{ov.log}</p>
                   </div>
                 );
               })()}
@@ -1353,15 +1400,15 @@
               {/* ── 選擇攻擊目標全域遮罩（fixed，不受 overflow-hidden 影響） ── */}
               {pendingCard && myRole !== 'host' && (
                 <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center safe-overlay animate-fade-in overflow-y-auto"
-                  style={{ background: 'rgba(10,15,35,0.97)', WebkitOverflowScrolling: 'touch' }}>
+                  style={{ background: 'rgba(247,242,232,0.97)', WebkitOverflowScrolling: 'touch' }}>
                   <div className="w-full max-w-xs my-auto">
-                    <p className="text-slate-400 text-sm text-center mb-2">⚡ 準備發動技能</p>
+                    <p className="app-text-2 text-sm text-center mb-2">⚡ 準備發動技能</p>
                     <div className="rounded-2xl p-4 text-center mb-5"
-                      style={{ background: 'rgba(234,179,8,0.15)', border: '2px solid rgba(234,179,8,0.7)' }}>
-                      <p className="text-yellow-300 font-black text-lg">【{pendingCard.name}】</p>
-                      <p className="text-slate-300 text-xs mt-1 leading-relaxed">{pendingCard.desc}</p>
+                      style={{ background: 'rgba(212,180,131,0.22)', border: '2px solid #C9A574' }}>
+                      <p className="app-accent-text font-black text-lg">【{pendingCard.name}】</p>
+                      <p className="app-text-2 text-xs mt-1 leading-relaxed">{pendingCard.desc}</p>
                     </div>
-                    <p className="text-rose-300 text-sm font-black text-center mb-3">⚔️ 選擇攻擊目標</p>
+                    <p className="text-rose-700 text-sm font-black text-center mb-3">⚔️ 選擇攻擊目標</p>
                     <div className="grid grid-cols-2 gap-3">
                       {Object.values(roomData.teams)
                         .filter(t => t.joined && t.id !== myRole && (roomData.scores?.[t.id] ?? 100) > 0)
@@ -1374,7 +1421,7 @@
                         ))}
                     </div>
                     <button onClick={() => setPendingCard(null)}
-                      className="mt-4 w-full text-slate-400 text-sm py-3 rounded-xl border border-slate-700 active:opacity-70">
+                      className="mt-4 w-full app-text-3 text-sm py-3 rounded-xl border app-border active:opacity-70">
                       取消
                     </button>
                   </div>
@@ -1382,7 +1429,7 @@
               )}
 
               {/* 老師斷線時 useEffect 會自動把 state 改成 end，不需要 banner */}
-              <header className="bg-slate-800 border-b border-slate-700 shadow-md">
+              <header className="app-card border-b app-border shadow-md">
                 <div className="p-3 flex justify-between items-center">
                   <span className="font-bold text-sm">房 {roomCode}</span>
                   <div className="flex items-center gap-2">
@@ -1393,17 +1440,17 @@
                       <span className="bg-emerald-500 text-white px-2 py-0.5 rounded-full text-xs font-black animate-pulse">搶答中</span>
                     )}
                     {roomData.buzzerWinner && answerTimeLeft !== null && (
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-black ${answerTimeLeft <= 3 ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-600 text-white'}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-black ${answerTimeLeft <= 3 ? 'bg-rose-500 text-white animate-pulse' : 'app-accent-bg'}`}>
                         ⏱ {answerTimeLeft}s
                       </span>
                     )}
-                    <span className="bg-slate-700 px-3 py-1 rounded-full text-xs">第 {roomData.qIndex + 1} 題</span>
+                    <span className="app-card-2 px-3 py-1 rounded-full text-xs">第 {roomData.qIndex + 1} 題</span>
                   {myRole === 'host' && roomData.state === 'playing' && (
-                    <button onClick={nextQ} className="bg-slate-600 hover:bg-slate-500 text-white px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition">跳過</button>
+                    <button onClick={nextQ} className="app-accent-bg px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition">跳過</button>
                   )}
                   {myRole === 'host' && (
                     <button onClick={() => setShowScoreboard(s => !s)}
-                      className={`px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition ${showScoreboard ? 'bg-yellow-500 text-black' : 'bg-slate-600 text-white'}`}>
+                      className={`px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition ${showScoreboard ? 'bg-yellow-500 text-black' : 'app-accent-bg'}`}>
                       {showScoreboard ? '遊戲' : '排行'}
                     </button>
                   )}
@@ -1411,7 +1458,7 @@
                 </div>
                 {/* 答題倒數進度條 */}
                 {roomData.buzzerWinner && answerTimeLeft !== null && (
-                  <div className="h-1 bg-slate-700 mx-3 mb-2 rounded-full overflow-hidden">
+                  <div className="h-1 app-card-2 mx-3 mb-2 rounded-full overflow-hidden">
                     <div className={`h-full transition-all duration-300 ${answerTimeLeft <= 3 ? 'bg-rose-500' : 'bg-amber-400'}`}
                       style={{ width: `${(answerTimeLeft / ANSWER_TIME_LIMIT) * 100}%` }} />
                   </div>
@@ -1419,13 +1466,13 @@
               </header>
               {myRole === 'host' && showScoreboard ? (
                 <div className="flex-1 overflow-auto p-4 flex flex-col gap-3">
-                  <h2 className="text-lg font-black text-center text-yellow-400 shrink-0">即時分數排行</h2>
+                  <h2 className="text-lg font-black text-center app-accent-text shrink-0">即時分數排行</h2>
                   {Object.values(roomData.teams)
                     .sort((a, b) => (roomData.scores?.[b.id] ?? 0) - (roomData.scores?.[a.id] ?? 0))
                     .map((t, idx) => {
                       const score = roomData.scores?.[t.id] ?? 0;
                       return (
-                        <div key={t.id} className="relative bg-slate-800 rounded-2xl overflow-hidden flex items-center px-5 py-5 gap-4 border-2 border-slate-700 shrink-0">
+                        <div key={t.id} className="relative app-card rounded-2xl overflow-hidden flex items-center px-5 py-5 gap-4 border-2 app-border shrink-0">
                           <div className="absolute inset-0 opacity-20 pointer-events-none">
                             <div className={`yuan-bar ${t.yuan?.color}`} style={{ width: `${Math.min(100, score)}%` }} />
                           </div>
@@ -1434,10 +1481,10 @@
                           </span>
                           <div className="relative flex-1">
                             <p className={`text-2xl font-black ${t.yuan?.text}`}>{t.yuan?.name}</p>
-                            <p className="text-xs text-slate-400">{t.name}</p>
+                            <p className="text-xs app-text-3">{t.name}</p>
                           </div>
-                          <span className={`relative text-4xl font-black ${score > 0 ? 'text-white' : 'text-slate-600'}`}>
-                            {score}<span className="text-sm text-slate-400 ml-1">分</span>
+                          <span className={`relative text-4xl font-black ${score > 0 ? 'app-text' : 'app-text-3'}`}>
+                            {score}<span className="text-sm app-text-3 ml-1">分</span>
                           </span>
                         </div>
                       );
@@ -1452,26 +1499,26 @@
                     const myScore = roomData.scores?.[myRole] ?? 0;
                     const isBuzz = roomData.buzzerWinner === myRole;
                     const isWrong = (roomData.wrongAnswerers || []).includes(myRole);
-                    const borderClass = team.yuan?.color?.replace('bg-', 'border-') || 'border-slate-600';
+                    const borderClass = team.yuan?.border || 'app-border';
                     const fx = roomData.statusEffects?.[myRole] || {};
                     return (
                       <div className={`relative rounded-xl border-2 overflow-hidden flex items-center px-3 py-2 gap-3 h-12
-                        ${isBuzz ? 'border-yellow-400 bg-white' : `${borderClass} bg-slate-800`}
+                        ${isBuzz ? 'border-yellow-400 bg-white' : `${borderClass} app-card`}
                         ${myScore <= 0 ? 'opacity-40' : ''}`}>
                         <div className="absolute inset-0 opacity-20 pointer-events-none">
                           <div className={`yuan-bar ${team.yuan?.color}`} style={{ width: `${Math.min(100, myScore)}%` }} />
                         </div>
-                        <span className="relative text-[10px] font-bold text-slate-400 shrink-0">我的</span>
-                        <span className={`relative text-sm font-black shrink-0 ${isBuzz ? team.yuan?.text : 'text-white'}`}>{team.yuan?.name}</span>
-                        {fx.shielded && <span className="relative text-[10px] bg-blue-500/30 text-blue-300 px-1 rounded shrink-0">🛡護</span>}
-                        {fx.doublePoints && <span className="relative text-[10px] bg-yellow-500/30 text-yellow-300 px-1 rounded shrink-0">×2</span>}
-                        {fx.priorityBuzz && <span className="relative text-[10px] bg-emerald-500/30 text-emerald-300 px-1 rounded shrink-0">優先</span>}
+                        <span className="relative text-[10px] font-bold app-text-3 shrink-0">我的</span>
+                        <span className={`relative text-sm font-black shrink-0 ${isBuzz ? team.yuan?.text : 'app-text'}`}>{team.yuan?.name}</span>
+                        {fx.shielded && <span className="relative text-[10px] bg-blue-100 text-blue-700 px-1 rounded shrink-0">🛡護</span>}
+                        {fx.doublePoints && <span className="relative text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded shrink-0">×2</span>}
+                        {fx.priorityBuzz && <span className="relative text-[10px] bg-emerald-100 text-emerald-700 px-1 rounded shrink-0">優先</span>}
                         <div className="relative flex-1 text-right">
-                          <span className={`text-2xl font-black ${isBuzz ? 'text-black' : myScore <= 20 ? 'text-rose-400' : 'text-white'}`}>{myScore}</span>
-                          <span className="text-xs text-slate-400 ml-1">分</span>
+                          <span className={`text-2xl font-black ${isBuzz ? 'text-black' : myScore <= 20 ? 'text-rose-500' : 'app-text'}`}>{myScore}</span>
+                          <span className="text-xs app-text-3 ml-1">分</span>
                         </div>
                         {isWrong && myScore > 0 && <span className="relative text-[10px] text-rose-400 font-bold shrink-0">已答題</span>}
-                        {myScore <= 0 && <span className="relative text-[10px] text-slate-500 font-bold shrink-0">已淘汰</span>}
+                        {myScore <= 0 && <span className="relative text-[10px] app-text-3 font-bold shrink-0">已淘汰</span>}
                       </div>
                     );
                   })()}
@@ -1484,14 +1531,14 @@
                       const isMe = t.id === myRole;
                       return (
                         <div key={t.id} className={`relative rounded-xl border-2 transition-all flex flex-col justify-center items-center overflow-hidden
-                          ${buzz ? 'border-yellow-400 bg-white z-10' : wronged ? 'border-rose-800 bg-slate-800' : isMe ? `${t.yuan?.color?.replace('bg-', 'border-')} bg-slate-800` : 'bg-slate-800 border-slate-700'}
+                          ${buzz ? 'border-yellow-400 app-card-3 z-10' : wronged ? 'border-rose-400 app-card-2' : isMe ? `${t.yuan?.border} app-card` : 'app-card app-border'}
                           ${score <= 0 ? 'opacity-30 grayscale' : ''}`}>
                           <div className="absolute inset-0 opacity-20 pointer-events-none">
                             <div className={`yuan-bar ${t.yuan?.color}`} style={{ width: `${Math.min(100, score)}%` }}></div>
                           </div>
-                          <p className="text-[8px] font-bold text-slate-500">{t.name}</p>
-                          <p className={`text-[10px] sm:text-sm font-black ${buzz ? t.yuan?.text : 'text-white'}`}>{t.yuan?.name}</p>
-                          <p className={`text-[10px] font-black ${buzz ? 'text-black' : 'text-slate-300'}`}>{score}分</p>
+                          <p className="text-[8px] font-bold app-text-3">{t.name}</p>
+                          <p className={`text-[10px] sm:text-sm font-black ${buzz ? t.yuan?.text : t.yuan?.text}`}>{t.yuan?.name}</p>
+                          <p className={`text-[10px] font-black ${buzz ? 'text-black' : 'app-text-2'}`}>{score}分</p>
                           {wronged && score > 0 && <p className="text-[8px] text-rose-400 font-bold">已答</p>}
                         </div>
                       );
@@ -1500,16 +1547,16 @@
                 </div>
 
                 {/* 題目區（可滾動，避免小螢幕內容被截斷） */}
-                <div className={`flex-1 bg-slate-800 p-4 rounded-2xl border-4 flex flex-col gap-3 overflow-y-auto min-h-0
-                  ${roomData.buzzerWinner ? 'border-yellow-400' : buzzIsOpen && roomData.state === 'playing' ? 'border-emerald-600' : 'border-slate-700'}`}
+                <div className={`flex-1 app-card p-4 rounded-2xl border-4 flex flex-col gap-3 overflow-y-auto min-h-0
+                  ${roomData.buzzerWinner ? 'border-yellow-400' : buzzIsOpen && roomData.state === 'playing' ? 'border-emerald-600' : 'app-border'}`}
                   style={{ WebkitOverflowScrolling: 'touch' }}>
                   <h2 className="text-xl sm:text-2xl font-black mobile-q-text shrink-0">{q.text}</h2>
                   <div className="flex flex-col gap-2.5">
                     {q.options.map((o, i) => (
                       <button key={i} onClick={() => handleAnswer(i)} disabled={myRole !== roomData.buzzerWinner}
                         className={`p-4 sm:p-5 rounded-xl border-2 text-left text-lg font-bold mobile-btn transition
-                          ${myRole === roomData.buzzerWinner ? 'bg-slate-100 text-black border-white active:scale-95' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
-                        <span className="inline-block w-7 h-7 rounded-full bg-black/10 text-center leading-7 mr-3 text-sm font-black shrink-0">{['A', 'B', 'C'][i]}</span>
+                          ${myRole === roomData.buzzerWinner ? 'app-card-3 app-text app-accent-border active:scale-95 shadow-md' : 'app-card-2 app-border-soft app-text-3'}`}>
+                        <span className="inline-block w-7 h-7 rounded-full text-center leading-7 mr-3 text-sm font-black shrink-0" style={{ background:'rgba(157,144,119,0.25)' }}>{['A', 'B', 'C'][i]}</span>
                         {o}
                       </button>
                     ))}
@@ -1529,8 +1576,8 @@
                 )}
 
                 {/* 戰況 log */}
-                <div className="h-20 bg-black/60 p-3 rounded-xl border-2 border-slate-700 font-mono text-[10px] overflow-hidden flex flex-col-reverse shrink-0">
-                  {roomData.actionLog.map((l, i) => <div key={i} className={i === 0 ? 'text-white font-bold' : 'text-slate-500'}>{l}</div>)}
+                <div className="h-20 app-card-2 p-3 rounded-xl border-2 app-border font-mono text-[10px] overflow-hidden flex flex-col-reverse shrink-0">
+                  {roomData.actionLog.map((l, i) => <div key={i} className={i === 0 ? 'app-text font-bold' : 'app-text-3'}>{l}</div>)}
                 </div>
               </main>
               )}
