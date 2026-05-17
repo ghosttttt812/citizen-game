@@ -112,7 +112,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-05';
+        const BUILD = '20260517-06';
 
         const YUAN_DB = [
           { id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
@@ -167,7 +167,9 @@
           const [timeToOpen, setTimeToOpen] = useState(null);       // 搶答開放倒數
           const [answerTimeLeft, setAnswerTimeLeft] = useState(null); // 答題剩餘秒數
           const [showScoreboard, setShowScoreboard] = useState(false);
-          const [pendingCard, setPendingCard] = useState(null); // 待選目標的卡牌
+          const [pendingCard, setPendingCard] = useState(null);   // 待選目標的技能卡
+          const [pendingGroup, setPendingGroup] = useState(null); // 選院確認流程
+          const [cardRevealed, setCardRevealed] = useState(false);
 
           const prevBuzzerWinner = useRef(null);
           const prevState = useRef(null);
@@ -314,6 +316,15 @@
           // ── 遊戲邏輯 ─────────────────────────────────────────
 
           const roomRef = () => db.collection('rooms_v2').doc(roomCode);
+
+          // 選院時先跳出說明 + 抽卡確認
+          const handleGroupSelect = (t) => {
+            if (t.joined) { showError('手腳太慢！此組別已被選走了。'); return; }
+            const excCard = roomData.hands?.[t.id]?.[0] || null;
+            const comCard = roomData.hands?.[t.id]?.[1] || null;
+            setPendingGroup({ gid: t.id, team: t, excCard, comCard });
+            setCardRevealed(false);
+          };
 
           // 為每組建立初始手牌（1張院專屬 + 1張隨機共同卡）
           const buildInitialHands = () => {
@@ -676,6 +687,9 @@
                 <input value={joinInput} onChange={e => setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="輸入 4 碼代碼" className="w-full bg-slate-900 p-5 rounded-2xl text-center text-2xl font-bold border-2 border-slate-600 focus:border-blue-500 outline-none" />
                 <button onClick={joinRoom} disabled={joinInput.length !== 4} className="w-full bg-blue-500 disabled:bg-slate-600 disabled:text-slate-400 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">加入遊戲 (學生)</button>
               </div>
+              <a href="rules.html" className="text-slate-400 text-sm font-bold underline underline-offset-4 active:opacity-70">
+                📖 遊戲說明 / 技能卡效果
+              </a>
             </div>
           );
 
@@ -712,7 +726,7 @@
                   <p className="text-white font-bold text-lg mb-4">請選擇你的陣營</p>
                   <div className="grid grid-cols-2 gap-3">
                     {Object.values(roomData.teams).map(t => (
-                      <button key={t.id} onClick={() => selectGroup(t.id)} disabled={t.joined}
+                      <button key={t.id} onClick={() => handleGroupSelect(t)} disabled={t.joined}
                         className={`p-4 rounded-xl font-black text-sm transition text-white
                           ${t.joined ? 'bg-slate-700 text-slate-500 opacity-50' : `${t.yuan?.color} active:scale-95`}`}>
                         {t.yuan?.name}
@@ -724,6 +738,54 @@
                   <div className="text-emerald-400 text-xl font-black animate-pulse">連線成功！等待老師啟動</div>
                 )}
               </div>
+
+              {/* ── 選院確認 Modal ── */}
+              {pendingGroup && (
+                <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 overflow-auto animate-fade-in">
+                  <div className="bg-slate-900 rounded-3xl border-4 border-yellow-400 p-6 max-w-xs w-full space-y-4">
+                    <div className="text-center">
+                      <p className="text-slate-400 text-sm">你選擇了</p>
+                      <h2 className={`text-2xl font-black ${pendingGroup.team.yuan?.text}`}>{pendingGroup.team.yuan?.name}</h2>
+                    </div>
+
+                    {/* 院專屬技能卡 */}
+                    <div className={`rounded-2xl p-4 border-2 border-yellow-500 bg-yellow-500/10`}>
+                      <p className="text-[10px] text-yellow-400 font-bold mb-1">⭐ 院專屬技能卡（開局持有）</p>
+                      <p className={`text-base font-black mb-2 ${pendingGroup.team.yuan?.text}`}>
+                        【{pendingGroup.excCard?.name}】
+                      </p>
+                      <p className="text-xs text-slate-300 leading-relaxed">{pendingGroup.excCard?.desc}</p>
+                    </div>
+
+                    {/* 共同卡抽取 */}
+                    {!cardRevealed ? (
+                      <button onClick={() => { sound.draw(); setCardRevealed(true); }}
+                        className="w-full bg-purple-600 text-white py-4 rounded-2xl font-black text-base active:scale-95 transition animate-pulse">
+                        🎴 抽取共同技能卡
+                      </button>
+                    ) : (
+                      <div className="rounded-2xl p-4 border-2 border-purple-400 bg-purple-500/10 animate-fade-in">
+                        <p className="text-[10px] text-purple-400 font-bold mb-1">🎴 隨機共同技能卡</p>
+                        <p className="text-base font-black text-white mb-2">
+                          【{pendingGroup.comCard?.name}】
+                        </p>
+                        <p className="text-xs text-slate-300 leading-relaxed">{pendingGroup.comCard?.desc}</p>
+                      </div>
+                    )}
+
+                    {cardRevealed && (
+                      <button onClick={() => { selectGroup(pendingGroup.gid); setPendingGroup(null); setCardRevealed(false); }}
+                        className="w-full bg-emerald-500 text-white py-5 rounded-2xl font-black text-xl active:scale-95 transition">
+                        ✅ 確認加入！
+                      </button>
+                    )}
+                    <button onClick={() => { setPendingGroup(null); setCardRevealed(false); }}
+                      className="w-full text-slate-500 text-sm py-2 active:opacity-70">
+                      ← 返回重選
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
 
