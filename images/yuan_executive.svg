@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" width="480" height="320">
+  <defs>
+    <linearGradient id="bgE" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8093A6"/>
+      <stop offset="100%" stop-color="#5C6F82"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="38%" r="50%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.35)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="320" rx="20" fill="url(#bgE)"/>
+  <rect width="480" height="320" rx="20" fill="url(#halo)"/>
+  <circle cx="240" cy="120" r="68" fill="rgba(255,255,255,0.18)"/>
+  <text x="240" y="148" font-size="78" text-anchor="middle">🏛️</text>
+  <text x="240" y="232" font-size="44" font-weight="900" fill="white" text-anchor="middle" font-family="'PingFang TC','Microsoft JhengHei','Noto Sans TC',sans-serif" letter-spacing="6">行政院</text>
+  <text x="240" y="263" font-size="14" fill="rgba(255,255,255,0.85)" text-anchor="middle" font-family="-apple-system,sans-serif" letter-spacing="3">EXECUTIVE YUAN</text>
+  <text x="240" y="295" font-size="13" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'PingFang TC','Microsoft JhengHei',sans-serif">最高行政機關</text>
+</svg>

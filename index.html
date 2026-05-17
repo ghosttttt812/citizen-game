@@ -269,7 +269,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-18';
+        const BUILD = '20260517-19';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -386,19 +386,19 @@
         // 第一個選項為正確答案（執行時會隨機洗牌）；老師可直接編輯姓名與圖檔路徑
         // 圖片放在 images/ 資料夾，若檔案不存在會自動 fallback 顯示 emoji
         const SURPRISE_EVENTS = [
-          { yuanId:'executive',   yuan:'行政院', img:'images/yuan_executive.jpg',   emoji:'🏛️',
+          { yuanId:'executive',   yuan:'行政院', img:'images/yuan_executive.svg',   emoji:'🏛️',
             text:'誰是現任行政院院長？',
             options:['卓榮泰', '蘇貞昌', '陳建仁', '賴清德'], answer:0 },
-          { yuanId:'legislative', yuan:'立法院', img:'images/yuan_legislative.jpg', emoji:'🏢',
+          { yuanId:'legislative', yuan:'立法院', img:'images/yuan_legislative.svg', emoji:'🏢',
             text:'誰是現任立法院院長？',
             options:['韓國瑜', '游錫堃', '王金平', '蘇嘉全'], answer:0 },
-          { yuanId:'judicial',    yuan:'司法院', img:'images/yuan_judicial.jpg',    emoji:'⚖️',
+          { yuanId:'judicial',    yuan:'司法院', img:'images/yuan_judicial.svg',    emoji:'⚖️',
             text:'誰是現任司法院院長？',
             options:['許宗力', '賴英照', '翁岳生', '賴浩敏'], answer:0 },
-          { yuanId:'control',     yuan:'監察院', img:'images/yuan_control.jpg',     emoji:'🔍',
+          { yuanId:'control',     yuan:'監察院', img:'images/yuan_control.svg',     emoji:'🔍',
             text:'誰是現任監察院院長？',
             options:['陳菊', '張博雅', '王建煊', '錢復'], answer:0 },
-          { yuanId:'examination', yuan:'考試院', img:'images/yuan_examination.jpg', emoji:'📚',
+          { yuanId:'examination', yuan:'考試院', img:'images/yuan_examination.svg', emoji:'📚',
             text:'誰是現任考試院院長？',
             options:['黃榮村', '伍錦霖', '關中', '姚嘉文'], answer:0 },
         ];
