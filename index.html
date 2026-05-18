@@ -271,7 +271,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260517-23';
+        const BUILD = '20260518-01';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -1056,6 +1056,19 @@
                   }
                 }
                 break;
+              case 'rotate':
+                // 選區重劃：全場分數往左輪轉一格
+                // 規則：第N組的新分數 = 第N+1組的原分數（第5組接第1組）
+                {
+                  const ROT_GIDS = ['group1','group2','group3','group4','group5'];
+                  const oldScores = { ...scores };
+                  ROT_GIDS.forEach((gid, i) => {
+                    const nextGid = ROT_GIDS[(i + 1) % ROT_GIDS.length];
+                    scores[gid] = oldScores[nextGid] ?? 0;
+                  });
+                  log += `，全場分數左移：第5→4、第4→3、第3→2、第2→1、第1→5`;
+                }
+                break;
               case 'steal-common':
                 // 擴權爭議：盲抽一張對方未使用的共同卡
                 if (targetId && hands[targetId]) {
@@ -1254,7 +1267,8 @@
             const cardBanned = roomData.statusEffects?.[myRole]?.cardBanned;
             // 整局只能用一次：usedOnQ !== null 表示永久已使用（含本回合）
             const alreadyPlayedThisRound = myHand.some(c => c.usedOnQ === roomData.qIndex);
-            const needsTarget = (card) => ['target','steal-exclusive','steal-common','card-ban','alliance','rotate'].includes(card.type);
+            // rotate（選區重劃）固定全場左移，不需挑目標
+            const needsTarget = (card) => ['target','steal-exclusive','steal-common','card-ban','alliance'].includes(card.type);
             // 顯示所有卡（除被彈劾棄置的）
             const visibleCards = myHand.filter(c => c.usedOnQ !== -1);
 
@@ -1545,10 +1559,10 @@
               <h1 className="text-4xl font-black">五院大亂鬥</h1>
               <p className="app-text-3 font-mono text-[10px]">Build: {BUILD}</p>
               <div className="w-full max-w-sm app-card p-6 rounded-3xl border-2 app-border shadow-xl space-y-4">
-                <button onClick={createRoom} className="w-full bg-emerald-500 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">建立房間 (老師)</button>
+                <button onClick={createRoom} className="w-full text-white py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition" style={{ backgroundColor:'#75809C' }}>建立房間（老師）</button>
                 <div className="h-px app-card-2"></div>
                 <input value={joinInput} onChange={e => setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="輸入 4 碼代碼" className="w-full app-card-2 p-5 rounded-2xl text-center text-2xl font-bold border-2 app-border focus:border-blue-500 outline-none" />
-                <button onClick={joinRoom} disabled={joinInput.length !== 4} className="w-full bg-blue-500 text-white disabled:bg-stone-300 disabled:text-stone-500 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">加入遊戲 (學生)</button>
+                <button onClick={joinRoom} disabled={joinInput.length !== 4} className="w-full bg-blue-500 text-white disabled:bg-stone-300 disabled:text-stone-500 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">加入遊戲（學生）</button>
               </div>
               <button onClick={() => { setShowRules(true); setRulesTab(0); }}
                 className="app-text-3 text-sm font-bold underline underline-offset-4 active:opacity-70">
