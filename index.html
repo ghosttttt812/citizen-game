@@ -271,7 +271,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260518-01';
+        const BUILD = '20260518-02';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -1586,7 +1586,7 @@
               <ErrorModal />
               <button onClick={leaveRoom} className="absolute top-6 right-6 app-text-3 app-card px-4 py-2 rounded-full text-sm font-bold active:scale-95 transition">離開</button>
               <button onClick={() => { setShowRules(true); setRulesTab(0); }} className="absolute top-6 left-6 app-text-3 app-card px-3 py-2 rounded-full text-xs font-bold active:scale-95 transition">📖 規則</button>
-              <div className="app-card p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm sm:max-w-md">
+              <div className="app-card p-8 rounded-3xl border-4 text-center shadow-2xl w-full max-w-sm sm:max-w-md" style={{ borderColor:'#75809C' }}>
                 <h2 className="app-text-3 text-lg font-bold">房間代碼：</h2>
                 <h1 className="text-6xl font-black tracking-widest my-6 select-all">{roomCode}</h1>
                 {myRole === 'host' ? (
@@ -1605,7 +1605,7 @@
                         );
                       })}
                     </div>
-                    <button onClick={startSync} className="w-full bg-yellow-500 text-black py-4 rounded-full font-black text-xl active:scale-95 transition">同步啟動</button>
+                    <button onClick={startSync} className="w-full text-white py-4 rounded-full font-black text-xl active:scale-95 transition" style={{ backgroundColor:'#75809C' }}>同步啟動</button>
                   </div>
                 ) : !myRole ? (
                   <div>
