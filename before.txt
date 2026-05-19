@@ -1,0 +1,638 @@
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
+import { LucideSwords, LucideZap, LucideCrosshair, LucideSkull, LucideUsers, LucideLogOut, LucidePlay, LucideAlertCircle } from 'lucide-react';
+
+// --- Firebase 初始化 ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- 遊戲資料庫 ---
+const INITIAL_HP = 100;
+
+const YUAN_DB = [
+{ id: 'executive', name: '行政院', color: 'bg-blue-500', text: 'text-blue-500' },
+{ id: 'legislative', name: '立法院', color: 'bg-emerald-500', text: 'text-emerald-500' },
+{ id: 'judicial', name: '司法院', color: 'bg-amber-500', text: 'text-amber-500' },
+{ id: 'examination', name: '考試院', color: 'bg-purple-500', text: 'text-purple-500' },
+{ id: 'control', name: '監察院', color: 'bg-rose-500', text: 'text-rose-500' }
+];
+
+const CARD_POOL = [
+{ id: 'c1', name: '【SSR】覆議卡', desc: '指定攻擊：扣除目標 25 HP', type: 'target', dmg: 25, heal: 0, rarity: 'text-yellow-400' },
+{ id: 'c2', name: '【SSR】倒閣卡', desc: '吸血攻擊：吸取目標 15 HP', type: 'target', dmg: 15, heal: 15, rarity: 'text-yellow-400' },
+{ id: 'c3', name: '【SR】違憲審查', desc: '範圍攻擊：其餘所有人扣 10 HP', type: 'aoe', dmg: 10, heal: 0, rarity: 'text-purple-400' },
+{ id: 'c4', name: '【SR】彈劾糾舉', desc: '制裁霸主：全場血量最高者扣 20 HP', type: 'auto-highest', dmg: 20, heal: 0, rarity: 'text-purple-400' },
+{ id: 'c5', name: '【R】國家考試', desc: '自我庇護：自身回復 25 HP', type: 'self', dmg: 0, heal: 25, rarity: 'text-blue-400' }
+];
+
+// 12題 Bloom 認知六層次題庫
+const QUESTION_BANK = [
+{ text: '提出「不信任案（倒閣）」是哪一個機關專屬的職權？', options: ['行政院', '立法院', '監察院'], answer: 1 },
+{ text: '總統發布緊急命令後，必須在幾天內提交哪個機關追認？', options: ['立法院 (10天內)', '司法院 (15天內)', '行政院 (7天內)'], answer: 0 },
+{ text: '小明亂丟垃圾被環保局開罰單。這屬於哪一種法律責任？', options: ['刑事責任', '民事責任', '行政責任'], answer: 2 },
+{ text: '人民權利受行政機關違法侵害時，應提起何種訴訟救濟？', options: ['民事訴訟', '行政訴訟', '刑事訴訟'], answer: 1 },
+{ text: '立院三讀通過法案，行政院覺得難以執行，下一步合法反擊是？', options: ['宣告法案無效', '移請立法院覆議', '解散立法院'], answer: 1 },
+{ text: '警方無搜索票強行進入民宅搜查，屋主可主張警方侵犯了什麼權利？', options: ['財產權', '隱私權', '平等權'], answer: 1 },
+{ text: '法官判決肇事者需賠償家屬100萬。這體現了何種法律功能？', options: ['威嚇犯罪', '解決紛爭，填補損害', '維護行政程序'], answer: 1 },
+{ text: '新聞：「某官員涉嫌貪污，遭檢方起訴。」這體現了什麼？', options: ['司法機關獨立追究刑事責任', '行政權對立法權的制衡', '監察權的彈劾功能'], answer: 0 },
+{ text: '為防範官員貪污，我國憲法設計哪兩個機關進行事後調查與懲處？', options: ['監察院調查，司法院審理', '立法院調查，行政院審理', '考試院調查，監察院審理'], answer: 0 },
+{ text: '若要制定保障「表意自由」的校規，下列何者最合理且不矛盾？', options: ['學生可任意發言，不受任何校規限制', '可組社團，但需登記且不得違反公序良俗', '只有成績優異者才有權利發表意見'], answer: 1 },
+{ text: '「班會多數決同意把某同學趕出教室。」這違背了什麼民主原則？', options: ['權力分立', '多數決不能侵犯少數基本權利', '誠實信用原則'], answer: 1 },
+{ text: '學校規定「成績不到80分禁止參加社團」。此規定最大的瑕疵是？', options: ['違反權力分立', '違反隱私權', '違反平等原則與比例原則'], answer: 2 }
+];
+
+const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
+
+export default function App() {
+const [user, setUser] = useState(null);
+const [isConnecting, setIsConnecting] = useState(true);
+
+const [roomCode, setRoomCode] = useState('');
+const [roomData, setRoomData] = useState(null);
+const [myRole, setMyRole] = useState(null); // 'host' 或 'group1'~'group5'
+const [joinInput, setJoinInput] = useState('');
+
+// 自訂錯誤訊息 Modal
+const [errorMsg, setErrorMsg] = useState('');
+
+const showError = (msg) => setErrorMsg(msg);
+
+// Firebase Auth 初始化
+useEffect(() => {
+const initAuth = async () => {
+try {
+if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+await signInWithCustomToken(auth, __initial_auth_token);
+} else {
+await signInAnonymously(auth);
+}
+} catch (error) {
+console.error("Auth error:", error);
+showError("連線至伺服器失敗，請重新整理網頁。");
+} finally {
+setIsConnecting(false);
+}
+};
+initAuth();
+const unsubscribe = onAuthStateChanged(auth, setUser);
+return () => unsubscribe();
+}, []);
+
+// 監聽房間資料
+useEffect(() => {
+if (!user || !roomCode) return;
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+const unsubscribe = onSnapshot(roomRef, (docSnap) => {
+if (docSnap.exists()) {
+setRoomData(docSnap.data());
+} else {
+showError("房間不存在或已由房主關閉！");
+setRoomCode('');
+setMyRole(null);
+}
+}, (error) => {
+console.error("Snapshot error:", error);
+showError("資料同步中斷，請確認網路連線！");
+});
+return () => unsubscribe();
+}, [user, roomCode]);
+
+// --- 遊戲邏輯與 Firebase 寫入 ---
+
+const generateRoomCode = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+
+const createRoom = async () => {
+if (!user) { showError("尚未連線到伺服器，請稍候再試！"); return; }
+try {
+const code = generateRoomCode();
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
+
+const initialData = {
+state: 'lobby',
+hostUid: user.uid,
+teams: {
+group1: { id: 'group1', name: '第 1 組', joined: false, yuan: null },
+group2: { id: 'group2', name: '第 2 組', joined: false, yuan: null },
+group3: { id: 'group3', name: '第 3 組', joined: false, yuan: null },
+group4: { id: 'group4', name: '第 4 組', joined: false, yuan: null },
+group5: { id: 'group5', name: '第 5 組', joined: false, yuan: null }
+},
+hp: { group1: INITIAL_HP, group2: INITIAL_HP, group3: INITIAL_HP, group4: INITIAL_HP, group5: INITIAL_HP },
+questions: shuffle(QUESTION_BANK),
+qIndex: 0,
+buzzerWinner: null,
+drawnCard: null,
+actionLog: ['🎯 遊戲房間已建立，等待各組加入...']
+};
+
+await setDoc(roomRef, initialData);
+setRoomCode(code);
+setMyRole('host');
+} catch (e) {
+showError("建立房間失敗：" + e.message);
+}
+};
+
+const joinRoom = async () => {
+if (!user) { showError("連線中，請稍候！"); return; }
+if (!joinInput || joinInput.length !== 4) { showError("請輸入正確的 4 碼房間代碼！"); return; }
+
+try {
+const code = joinInput.toUpperCase();
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
+const snap = await getDoc(roomRef);
+if (snap.exists()) {
+setRoomCode(code);
+} else {
+showError(`找不到代碼為「${code}」的房間！\n請確認老師大螢幕上的代碼。`);
+}
+} catch (e) {
+showError("加入房間失敗：" + e.message);
+}
+};
+
+const selectGroup = async (groupId) => {
+if (!user || !roomCode || !roomData) return;
+try {
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+if (roomData.teams[groupId].joined) {
+showError("手腳太慢啦！此組別剛剛已經被別人選走了。");
+return;
+}
+await updateDoc(roomRef, {
+[`teams.${groupId}.joined`]: true,
+[`teams.${groupId}.uid`]: user.uid
+});
+setMyRole(groupId);
+} catch (e) {
+showError("選擇組別時發生錯誤：" + e.message);
+}
+};
+
+const startGame = async () => {
+if (myRole !== 'host' || !roomData) return;
+try {
+const shuffledYuans = shuffle(YUAN_DB);
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+
+const updates = {
+state: 'playing',
+actionLog: ['🎲 命運輪盤啟動，已隨機分配五院身分！', ...roomData.actionLog].slice(0, 5)
+};
+
+Object.keys(roomData.teams).forEach((groupId, idx) => {
+updates[`teams.${groupId}.yuan`] = shuffledYuans[idx];
+});
+
+await updateDoc(roomRef, updates);
+} catch (e) {
+showError("開始遊戲失敗：" + e.message);
+}
+};
+
+const handleBuzz = async () => {
+if (!myRole.startsWith('group') || roomData.state !== 'playing' || roomData.buzzerWinner) return;
+if (roomData.hp[myRole] <= 0) return;
+
+try {
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+await updateDoc(roomRef, { buzzerWinner: myRole });
+} catch (e) {
+console.error("Buzz error:", e);
+}
+};
+
+const handleAnswer = async (optionIdx) => {
+if (myRole !== roomData.buzzerWinner || roomData.state !== 'playing') return;
+
+try {
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+const currentQ = roomData.questions[roomData.qIndex];
+const myTeam = roomData.teams[myRole];
+
+if (optionIdx === currentQ.answer) {
+// 答對抽卡
+const card = shuffle(CARD_POOL)[0];
+await updateDoc(roomRef, {
+state: 'gacha',
+drawnCard: card,
+actionLog: [`✨ ${myTeam.yuan.name} 答對了！抽出了 ${card.name}！`, ...roomData.actionLog].slice(0, 5)
+});
+
+// 主機自動判定非鎖定卡的發動 (2秒後)
+if (card.type !== 'target') {
+setTimeout(() => executeCardSkill(card, null), 2000);
+}
+} else {
+// 答錯懲罰
+await updateDoc(roomRef, {
+[`hp.${myRole}`]: Math.max(0, roomData.hp[myRole] - 15),
+actionLog: [`❌ ${myTeam.yuan.name} 答錯了！受到知識反噬 (-15 HP)`, ...roomData.actionLog].slice(0, 5),
+buzzerWinner: null
+});
+setTimeout(() => nextQuestion(), 2000);
+}
+} catch (e) {
+showError("作答傳輸失敗：" + e.message);
+}
+};
+
+const executeCardSkill = async (card, targetGroupId) => {
+try {
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+const attacker = roomData.teams[roomData.buzzerWinner];
+let newHp = { ...roomData.hp };
+let logMsg = '';
+
+switch(card.type) {
+case 'target':
+const target = roomData.teams[targetGroupId];
+newHp[targetGroupId] = Math.max(0, newHp[targetGroupId] - card.dmg);
+if(card.heal > 0) newHp[roomData.buzzerWinner] = Math.min(150, newHp[roomData.buzzerWinner] + card.heal);
+logMsg = `💥 鎖定攻擊！${target.yuan.name} 遭到重擊 (-${card.dmg} HP)`;
+break;
+case 'aoe':
+Object.keys(newHp).forEach(key => {
+if (key !== roomData.buzzerWinner) newHp[key] = Math.max(0, newHp[key] - card.dmg);
+});
+logMsg = `🌋 全場震盪！其餘四院皆受到波及 (-${card.dmg} HP)`;
+break;
+case 'auto-highest':
+let highest = null; let maxVal = -1;
+Object.keys(newHp).forEach(key => {
+if (newHp[key] > maxVal && key !== roomData.buzzerWinner) { maxVal = newHp[key]; highest = key; }
+});
+if(highest) {
+newHp[highest] = Math.max(0, newHp[highest] - card.dmg);
+logMsg = `👁️ 霸主制裁！血量最高的 ${roomData.teams[highest].yuan.name} 被鎖定 (-${card.dmg} HP)`;
+}
+break;
+case 'self':
+newHp[roomData.buzzerWinner] = Math.min(150, newHp[roomData.buzzerWinner] + card.heal);
+logMsg = `🛡️ 庇護降臨！${attacker.yuan.name} 回復了 ${card.heal} HP`;
+break;
+default: break;
+}
+
+await updateDoc(roomRef, {
+hp: newHp,
+actionLog: [logMsg, ...roomData.actionLog].slice(0, 5)
+});
+
+setTimeout(() => nextQuestion(), 3000);
+} catch (e) {
+console.error("Skill execution error:", e);
+}
+};
+
+const nextQuestion = async () => {
+if (!roomData) return;
+try {
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+if (roomData.qIndex + 1 < roomData.questions.length) {
+await updateDoc(roomRef, {
+qIndex: roomData.qIndex + 1,
+buzzerWinner: null,
+drawnCard: null,
+state: 'playing'
+});
+} else {
+await updateDoc(roomRef, { state: 'end' });
+}
+} catch (e) {
+console.error("Next question error:", e);
+}
+};
+
+const resetGame = async () => {
+if (myRole !== 'host') return;
+try {
+const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+await updateDoc(roomRef, {
+state: 'lobby',
+hp: { group1: INITIAL_HP, group2: INITIAL_HP, group3: INITIAL_HP, group4: INITIAL_HP, group5: INITIAL_HP },
+questions: shuffle(QUESTION_BANK),
+qIndex: 0,
+buzzerWinner: null,
+drawnCard: null,
+actionLog: ['🔄 房主已重置遊戲，等待重新分配身分...']
+});
+} catch (e) {
+showError("重置遊戲失敗：" + e.message);
+}
+};
+
+const leaveRoom = () => {
+setRoomCode('');
+setRoomData(null);
+setMyRole(null);
+};
+
+// --- UI 元件：自訂錯誤彈窗 ---
+const ErrorModal = () => {
+if (!errorMsg) return null;
+return (
+<div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+<div className="bg-slate-800 border-4 border-rose-500 p-8 rounded-3xl max-w-sm w-full text-center shadow-[0_0_40px_rgba(244,63,94,0.4)] transform scale-100 transition-all">
+<LucideAlertCircle className="text-rose-500 w-16 h-16 mx-auto mb-4 animate-bounce" />
+<h3 className="text-2xl font-black text-white mb-3">系統提示</h3>
+<p className="text-slate-300 font-medium mb-8 whitespace-pre-wrap leading-relaxed">{errorMsg}</p>
+<button onClick={() => setErrorMsg('')} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-black text-lg py-4 rounded-xl transition shadow-lg active:scale-95">
+我知道了
+</button>
+</div>
+</div>
+);
+};
+
+// --- 畫面渲染分支 ---
+
+if (isConnecting || !user) return (
+<div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4">
+<LucideZap className="text-yellow-400 w-16 h-16 animate-pulse mb-4" />
+<h2 className="text-2xl font-bold tracking-widest text-slate-300">系統連線中...</h2>
+<ErrorModal />
+</div>
+);
+
+// 1. 大廳畫面
+if (!roomCode || !roomData) {
+return (
+<div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 md:p-8">
+<ErrorModal />
+<LucideSwords className="text-yellow-400 w-24 h-24 mb-6 animate-pulse" />
+<h1 className="text-4xl md:text-5xl font-black text-white mb-10 tracking-widest text-center leading-tight">五院大亂鬥<br/><span className="text-2xl text-amber-500 tracking-normal">連線對戰版</span></h1>
+
+<div className="flex flex-col md:flex-row gap-6 w-full max-w-3xl">
+{/* 教師端 */}
+<div className="flex-1 bg-slate-800 p-8 rounded-3xl border-2 border-slate-700 flex flex-col items-center shadow-xl">
+<LucidePlay className="text-emerald-400 w-12 h-12 mb-4" />
+<h2 className="text-2xl font-bold text-white mb-2">老師 / 房主</h2>
+<p className="text-slate-400 text-center mb-6 text-sm">建立房間並投影於大螢幕，掌控全場進度。</p>
+<button onClick={createRoom} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xl py-4 rounded-xl transition active:scale-95 shadow-lg">建立新房間</button>
+</div>
+
+{/* 學生端 */}
+<div className="flex-1 bg-slate-800 p-8 rounded-3xl border-2 border-slate-700 flex flex-col items-center shadow-xl">
+<LucideUsers className="text-blue-400 w-12 h-12 mb-4" />
+<h2 className="text-2xl font-bold text-white mb-2">學生 / 玩家</h2>
+<p className="text-slate-400 text-center mb-6 text-sm">輸入老師提供的房間代碼，使用手機平板參戰。</p>
+<input
+type="text" value={joinInput} onChange={(e)=>setJoinInput(e.target.value.toUpperCase())} maxLength={4}
+placeholder="輸入 4 碼代碼" className="w-full bg-slate-900 text-white text-center text-2xl font-black py-4 rounded-xl border-2 border-slate-600 focus:border-blue-500 outline-none mb-4 uppercase tracking-widest transition-all"
+/>
+<button onClick={joinRoom} disabled={joinInput.length !== 4} className="w-full bg-blue-500 disabled:bg-slate-600 hover:bg-blue-600 disabled:text-slate-400 text-white font-black text-xl py-4 rounded-xl transition active:scale-95 shadow-lg">加入遊戲</button>
+</div>
+</div>
+</div>
+);
+}
+
+// 2. 房間等待/分配畫面
+if (roomData.state === 'lobby') {
+return (
+<div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 md:p-8 relative">
+<ErrorModal />
+<button onClick={leaveRoom} className="absolute top-6 right-6 text-slate-400 hover:text-white flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-full transition"><LucideLogOut size={18}/> 離開</button>
+<div className="bg-slate-800 p-6 md:p-12 rounded-3xl border-4 border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.2)] text-center max-w-2xl w-full">
+<h2 className="text-2xl text-slate-400 font-bold mb-3">請在下方輸入房間代碼加入：</h2>
+<h1 className="text-7xl md:text-9xl font-black text-white tracking-widest mb-10 select-all drop-shadow-lg">{roomCode}</h1>
+
+{myRole === 'host' ? (
+<div className="animate-fade-in">
+<p className="text-yellow-400 mb-6 font-bold text-lg">各組連線狀態</p>
+<div className="flex flex-wrap justify-center gap-4 mb-10">
+{Object.values(roomData.teams).map(t => (
+<span key={t.id} className={`px-5 py-3 rounded-full font-black text-sm border-2 ${t.joined ? 'bg-emerald-500 border-emerald-400 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'bg-slate-800 border-slate-600 text-slate-500'}`}>
+{t.name} {t.joined ? '✓ 連線成功' : '等待中...'}
+</span>
+))}
+</div>
+<button onClick={startGame} className="w-full md:w-auto bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-slate-900 text-2xl font-black py-4 px-16 rounded-full shadow-xl transform transition active:scale-95">
+開始遊戲 (隨機分配五院)
+</button>
+</div>
+) : (
+<div className="animate-fade-in">
+{!myRole ? (
+<>
+<p className="text-white mb-6 font-bold text-xl">請選擇你的組別：</p>
+<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+{Object.values(roomData.teams).map(t => (
+<button key={t.id} onClick={() => selectGroup(t.id)} disabled={t.joined}
+className={`py-5 rounded-2xl font-black text-xl transition-all shadow-lg
+${t.joined ? 'bg-slate-700 text-slate-500 cursor-not-allowed opacity-50' : 'bg-blue-600 border-b-4 border-blue-800 hover:bg-blue-500 text-white active:translate-y-1 active:border-b-0'}`}>
+{t.name}
+</button>
+))}
+</div>
+</>
+) : (
+<div className="py-10">
+<div className="text-3xl font-black text-emerald-400 animate-pulse mb-6 flex items-center justify-center gap-3">
+<LucideZap /> 成功加入 {roomData.teams[myRole].name}！
+</div>
+<span className="text-xl text-slate-400 font-bold border-2 border-slate-700 bg-slate-900 px-6 py-3 rounded-full inline-block shadow-inner">請抬頭看大螢幕，等待老師開始...</span>
+</div>
+)}
+</div>
+)}
+</div>
+</div>
+);
+}
+
+// 3. 遊戲主畫面
+const currentQ = roomData.questions[roomData.qIndex];
+const isHost = myRole === 'host';
+const myTeam = isHost ? null : roomData.teams[myRole];
+const myYuanColor = myTeam?.yuan?.color || 'bg-slate-800';
+
+return (
+<div className="min-h-screen bg-slate-900 flex flex-col font-sans overflow-hidden">
+<ErrorModal />
+
+{/* 頂部資訊列 */}
+<header className="bg-slate-800 text-white p-3 md:p-4 shadow-lg flex justify-between items-center border-b border-slate-700 z-20">
+<div className="flex items-center gap-3">
+<span className="font-bold text-slate-400">房 {roomCode}</span>
+<span className={`px-4 py-1.5 rounded-full font-black text-sm md:text-base tracking-widest ${isHost ? 'bg-slate-600 text-white' : myYuanColor + ' text-white'}`}>
+{isHost ? '主控台轉播畫面' : `${myTeam.name} (${myTeam.yuan?.name})`}
+</span>
+</div>
+<div className="text-sm md:text-base font-bold bg-slate-700 px-4 py-1.5 rounded-full border border-slate-600">
+題數：{roomData.qIndex + 1} / {roomData.questions.length}
+</div>
+</header>
+
+{/* 遊戲區塊 */}
+<main className="flex-1 relative flex flex-col lg:flex-row p-4 gap-4 z-10 overflow-hidden">
+
+{/* 左側：戰況看板 */}
+<div className="lg:w-1/3 grid grid-cols-5 lg:grid-cols-2 gap-2 content-start overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
+{Object.values(roomData.teams).map((team) => {
+const hpVal = roomData.hp[team.id];
+const isDead = hpVal <= 0;
+const isBuzzed = roomData.buzzerWinner === team.id;
+const isMe = myRole === team.id;
+
+return (
+<div key={team.id} className={`relative p-3 md:p-4 rounded-xl md:rounded-2xl border-4 transition-all flex-shrink-0 w-32 md:w-auto lg:w-full
+${isBuzzed ? 'border-yellow-400 scale-[1.02] shadow-[0_0_20px_rgba(250,204,21,0.6)] z-10 bg-white' : 'border-slate-800 bg-slate-800'}
+${isDead ? 'opacity-40 grayscale' : ''} ${isMe ? 'ring-4 ring-white ring-offset-2 ring-offset-slate-900' : ''}
+`}>
+<div className="absolute top-0 left-0 w-full h-full rounded-lg overflow-hidden pointer-events-none opacity-20">
+<div className={`h-full ${team.yuan?.color} transition-all duration-500`} style={{ width: `${Math.min(100, (hpVal/150)*100)}%` }}></div>
+</div>
+<div className="relative z-10 flex flex-col items-center">
+<div className={`text-[10px] md:text-sm font-bold ${isBuzzed ? 'text-slate-500' : 'text-slate-400'}`}>{team.name}</div>
+<h3 className={`font-black text-sm md:text-2xl mt-1 ${isBuzzed ? team.yuan?.text : 'text-white'}`}>{team.yuan?.name}</h3>
+<div className={`text-2xl md:text-4xl font-black mt-2 flex items-center ${isBuzzed ? 'text-slate-900' : 'text-white'}`}>
+{hpVal} <span className="text-[10px] md:text-sm text-slate-500 ml-1 hidden md:inline">HP</span>
+{isDead && <LucideSkull className="text-rose-500 ml-2 animate-bounce" size={20}/>}
+</div>
+</div>
+</div>
+);
+})}
+</div>
+
+{/* 右側：互動與顯示區 */}
+<div className="lg:w-2/3 flex flex-col gap-4 h-full relative">
+
+{/* 主視覺 / 題目框 */}
+{roomData.state !== 'end' ? (
+<div className={`flex-1 bg-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl transition-all border-4 flex flex-col justify-center overflow-y-auto
+${roomData.buzzerWinner ? 'border-yellow-400 bg-slate-800/80' : 'border-slate-700'}
+${(roomData.state === 'gacha' || (roomData.state === 'targeting' && !isHost)) ? 'opacity-30 blur-sm pointer-events-none' : ''}
+`}>
+<div className="flex items-center gap-3 mb-6 md:mb-8">
+{roomData.buzzerWinner ? (
+<span className="bg-yellow-400 text-slate-900 px-5 py-2 rounded-lg font-black animate-pulse flex items-center gap-2 text-lg shadow-[0_0_15px_rgba(250,204,21,0.5)]">
+<LucideZap size={20}/> {roomData.teams[roomData.buzzerWinner].yuan.name} 搶答作答中！
+</span>
+) : (
+<span className="bg-slate-700 text-white px-5 py-2 rounded-lg font-bold border border-slate-600">準備搶答</span>
+)}
+</div>
+<h2 className="text-2xl md:text-4xl lg:text-5xl font-black text-white leading-snug mb-8 md:mb-12 tracking-wide">
+{currentQ.text}
+</h2>
+
+<div className="space-y-4 md:space-y-5">
+{currentQ.options.map((opt, idx) => {
+const amIAnswering = myRole === roomData.buzzerWinner;
+return (
+<button key={idx} onClick={() => handleAnswer(idx)} disabled={!amIAnswering || roomData.state !== 'playing'}
+className={`w-full text-left p-5 md:p-6 rounded-2xl border-2 text-xl md:text-2xl font-bold transition-all
+${amIAnswering ? 'bg-slate-100 border-white text-slate-900 hover:bg-white cursor-pointer shadow-xl active:scale-95' : 'bg-slate-900 border-slate-800 text-slate-500'}
+`}>
+<span className="inline-block w-10 h-10 rounded-full bg-black/20 text-center leading-10 mr-4 text-base align-middle font-black shadow-inner">
+{['A','B','C'][idx]}
+</span>
+{opt}
+</button>
+);
+})}
+</div>
+
+{/* 專屬玩家的手機搶答大按鈕 */}
+{!isHost && roomData.state === 'playing' && !roomData.buzzerWinner && (
+<button onClick={handleBuzz} disabled={roomData.hp[myRole] <= 0}
+className={`mt-8 w-full py-8 md:py-10 rounded-3xl font-black text-4xl md:text-5xl text-white shadow-[0_10px_0_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-2 transition-all tracking-widest
+${roomData.hp[myRole] <= 0 ? 'bg-slate-600 shadow-none translate-y-2' : myYuanColor}`}>
+{roomData.hp[myRole] <= 0 ? '已陣亡' : '搶答 PUSH!'}
+</button>
+)}
+</div>
+) : (
+/* 結局畫面 */
+<div className="flex-1 bg-gradient-to-b from-slate-800 to-slate-900 rounded-3xl p-8 flex flex-col items-center justify-center border-4 border-yellow-500 text-center shadow-[0_0_50px_rgba(234,179,8,0.3)] animate-fade-in">
+<div className="text-7xl mb-6">👑</div>
+<h2 className="text-3xl text-yellow-400 font-bold mb-4 tracking-widest">國家霸主誕生</h2>
+<div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 mb-8 w-full max-w-md shadow-2xl">
+{Object.values(roomData.teams).sort((a,b) => roomData.hp[b.id] - roomData.hp[a.id]).map((t, idx) => (
+<div key={t.id} className="flex justify-between items-center mb-3 font-black text-xl">
+<span className="text-white flex items-center gap-3">
+<span className="text-slate-500 w-6">{idx+1}.</span> <span className={t.yuan?.text}>{t.yuan?.name}</span>
+</span>
+<span className={roomData.hp[t.id] > 0 ? 'text-yellow-400' : 'text-rose-500'}>{roomData.hp[t.id]} HP</span>
+</div>
+))}
+</div>
+{isHost ? (
+<button onClick={resetGame} className="bg-white hover:bg-slate-100 text-slate-900 text-2xl font-black py-4 px-12 rounded-full shadow-xl active:scale-95 transition">
+重置房間，再戰一局
+</button>
+) : (
+<p className="text-slate-400 font-bold text-xl animate-pulse">等待老師重置遊戲...</p>
+)}
+</div>
+)}
+
+{/* 戰況轉播器 */}
+<div className="h-32 md:h-48 bg-black/60 border-2 border-slate-700 rounded-2xl p-4 overflow-hidden flex flex-col font-mono z-0 shadow-inner">
+<div className="text-emerald-400 font-bold mb-3 flex items-center border-b border-slate-700 pb-2 text-lg">
+<LucideZap size={20} className="mr-2"/> 權力鬥爭日誌
+</div>
+<div className="flex-1 flex flex-col-reverse overflow-hidden">
+{roomData.actionLog.map((log, i) => (
+<div key={i} className={`text-base md:text-lg py-1 ${i === 0 ? 'text-white font-black animate-fade-in' : 'text-slate-400 font-medium'}`}>
+{log}
+</div>
+))}
+</div>
+</div>
+
+{/* 抽卡與瞄準畫面疊加層 */}
+{(roomData.state === 'gacha' || roomData.state === 'targeting') && (
+<div className="absolute inset-0 z-50 flex items-center justify-center p-4">
+<div className="bg-slate-900 border-4 border-yellow-400 rounded-3xl p-8 max-w-md w-full shadow-[0_0_60px_rgba(250,204,21,0.4)] text-center animate-fade-in">
+<div className="text-base text-slate-400 font-black mb-2 tracking-widest">公民權力解放</div>
+<h2 className={`text-4xl md:text-5xl font-black mb-6 ${roomData.drawnCard.rarity} drop-shadow-md`}>{roomData.drawnCard.name}</h2>
+<div className="bg-slate-800 p-5 rounded-xl mb-8 border border-slate-700 shadow-inner">
+<p className="text-xl md:text-2xl text-white font-bold leading-relaxed">{roomData.drawnCard.desc}</p>
+</div>
+
+{roomData.state === 'targeting' ? (
+myRole === roomData.buzzerWinner ? (
+<div className="animate-fade-in">
+<div className="text-rose-400 font-black text-xl mb-4 animate-pulse flex items-center justify-center gap-2">
+<LucideCrosshair size={24}/> 請點擊目標進行攻擊：
+</div>
+<div className="grid grid-cols-2 gap-3">
+{Object.values(roomData.teams).filter(t => t.id !== myRole && roomData.hp[t.id] > 0).map(t => (
+<button key={t.id} onClick={() => executeCardSkill(roomData.drawnCard, t.id)}
+className={`py-4 rounded-xl font-black text-xl text-white ${t.yuan?.color} hover:opacity-90 active:scale-95 transition shadow-lg`}>
+{t.yuan?.name}
+</button>
+))}
+</div>
+</div>
+) : (
+<div className="text-rose-500 font-black text-3xl animate-pulse bg-rose-900/30 p-4 rounded-2xl border border-rose-500">
+⚠️ 警告！對手正在瞄準！
+</div>
+)
+) : (
+<div className="text-yellow-400 font-black text-2xl animate-pulse">⚡ 系統發動技能中...</div>
+)}
+</div>
+</div>
+)}
+
+</div>
+</main>
+
+<style dangerouslySetInnerHTML={{__html: `
+@keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+`}} />
+</div>
+);
+}
