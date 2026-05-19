@@ -729,7 +729,7 @@
             prevWrongLen.current = currWrongLen;
           }, [roomData]);
 
-          // 突發事件結算後，每個學生再看一次自己組別的答對/答錯通知（補播；自己 host 不彈）
+          // 突發事件結算後，每個學生才看到自己組別的答對/答錯通知（避免提前洩題）
           useEffect(() => {
             const ev = roomData?.surpriseEvent;
             if (!ev?.resolved || !ev.results || myRole === 'host') return;
@@ -1313,7 +1313,7 @@
             }
           };
 
-          // 學生在突發事件中作答（每人只可選一次；自己立刻看到答對/答錯動畫）
+          // 學生在突發事件中作答（每人只可選一次；結算前只顯示已選，不顯示正解）
           const answerSurprise = async (idx) => {
             if (myRole === 'host' || !roomData?.surpriseEvent) return;
             if (roomData.surpriseEvent.answers?.[myRole] !== undefined) return;
@@ -1324,20 +1324,15 @@
                 if (ev.resolved) throw new Error('突發事件已結算。');
                 if (Date.now() > ev.deadline) throw new Error('作答時間已結束。');
                 if (ev.answers?.[myRole] !== undefined) return null;
-                const isCorrect = idx === ev.answer;
-                const team = data.teams[myRole];
                 return {
                   accepted: true,
                   idx,
-                  isCorrect,
-                  yuanName: team?.yuan?.name,
-                  yuanText: team?.yuan?.text,
-                  points: isCorrect ? SURPRISE_POINTS : -WRONG_PENALTY,
                   updates: { [`surpriseEvent.answers.${myRole}`]: idx }
                 };
               });
               if (result?.accepted) {
-                markLocalAnswer(result.idx, result.isCorrect, 'surprise', result.yuanName, result.yuanText, result.points);
+                if (localAnswerTimer.current) { clearTimeout(localAnswerTimer.current); localAnswerTimer.current = null; }
+                setLocalAnswerResult({ idx: result.idx, isCorrect: null, scope: 'surprise' });
               }
             } catch (e) {
               showError("突發事件作答失敗：" + e.message);
@@ -1902,7 +1897,8 @@
           if (roomData.state === 'surprise' && roomData.surpriseEvent) {
             const ev = roomData.surpriseEvent;
             const myAnswer = ev.answers?.[myRole];
-            const hasAnswered = myAnswer !== undefined && myRole !== 'host';
+            const hasPendingSurpriseAnswer = localAnswerResult?.scope === 'surprise';
+            const hasAnswered = (myAnswer !== undefined || hasPendingSurpriseAnswer) && myRole !== 'host';
             const yuanInfo = YUAN_DB.find(y => y.name === ev.yuan);
             const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
             const answeredCount = Object.keys(ev.answers || {}).length;
@@ -1985,9 +1981,9 @@
                       <p className="app-text-3 text-xs mt-2">作答完畢或時間到後自動結算</p>
                       <div className="mt-4 grid grid-cols-1 gap-2">
                         {ev.options.map((o, i) => (
-                          <div key={i} className={`p-3 rounded-xl border-2 text-left ${i === ev.answer ? 'app-accent-border app-accent-bg' : 'app-card-3 app-border app-text'}`}>
+                          <div key={i} className="p-3 rounded-xl border-2 text-left app-card-3 app-border app-text">
                             <span className="inline-block w-7 h-7 rounded-full text-center leading-7 mr-3 text-sm font-black" style={{ background:'rgba(255,255,255,0.25)' }}>{['A','B','C','D'][i]}</span>
-                            {o} {i === ev.answer && <span className="ml-2 text-xs font-bold">✓ 正解</span>}
+                            {o}
                           </div>
                         ))}
                       </div>
@@ -1995,10 +1991,10 @@
                   ) : (
                     <div className="grid grid-cols-1 gap-2.5">
                       {ev.options.map((o, i) => {
-                        const picked = myAnswer === i;
                         const isLocalPicked = localAnswerResult?.scope === 'surprise' && localAnswerResult.idx === i;
-                        const pickedCorrect = isLocalPicked && localAnswerResult.isCorrect;
-                        const pickedWrong   = isLocalPicked && !localAnswerResult.isCorrect;
+                        const picked = myAnswer === i || isLocalPicked;
+                        const pickedCorrect = isLocalPicked && localAnswerResult.isCorrect === true;
+                        const pickedWrong   = isLocalPicked && localAnswerResult.isCorrect === false;
                         return (
                           <button key={i} onClick={() => answerSurprise(i)} disabled={hasAnswered}
                             className={`p-4 rounded-xl border-2 text-left text-base font-bold mobile-btn transition
