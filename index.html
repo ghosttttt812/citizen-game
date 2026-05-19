@@ -228,26 +228,76 @@
         let active   = null;
         let unlocked = false;
         let pending  = 'lobby';   // 使用者互動前暫存
+        let fadeOutTimer = null;
+        let fadeInTimer = null;
+        let switchSeq = 0;
+
+        const baseVolume = (track) => track === lobby ? 0.35 : 0.40;
+        const clearFadeTimers = () => {
+          if (fadeOutTimer) clearInterval(fadeOutTimer);
+          if (fadeInTimer) clearInterval(fadeInTimer);
+          fadeOutTimer = null;
+          fadeInTimer = null;
+        };
+        const resetTrack = (track) => {
+          track.pause();
+          track.currentTime = 0;
+          track.volume = baseVolume(track);
+        };
+        const silenceInactive = (keep) => {
+          [lobby, game].forEach(track => {
+            if (track !== keep) resetTrack(track);
+          });
+        };
 
         const _switch = (next) => {
-          if (active === next) return;
-          // 淡出舊曲
-          if (active) {
-            const old = active;
-            const fade = setInterval(() => {
-              if (old.volume > 0.03) { old.volume = Math.max(0, old.volume - 0.03); }
-              else { old.pause(); old.currentTime = 0; old.volume = old === lobby ? 0.35 : 0.40; clearInterval(fade); }
+          pending = next === game ? 'game' : 'lobby';
+          const token = ++switchSeq;
+          clearFadeTimers();
+
+          if (active === next) {
+            silenceInactive(next);
+            if (next.paused) next.play().catch(() => {});
+            next.volume = baseVolume(next);
+            return;
+          }
+
+          const old = active;
+          active = next;
+          [lobby, game].forEach(track => {
+            if (track !== next && track !== old) resetTrack(track);
+          });
+
+          if (old && old !== next) {
+            fadeOutTimer = setInterval(() => {
+              if (token !== switchSeq) {
+                clearInterval(fadeOutTimer);
+                return;
+              }
+              if (old.volume > 0.03) old.volume = Math.max(0, old.volume - 0.03);
+              else {
+                resetTrack(old);
+                clearInterval(fadeOutTimer);
+                fadeOutTimer = null;
+              }
             }, 40);
           }
-          // 淡入新曲
+
           next.volume = 0;
           next.play().catch(() => {});
-          const fadeIn = setInterval(() => {
-            const target = next === lobby ? 0.35 : 0.40;
-            if (next.volume < target - 0.03) { next.volume = Math.min(target, next.volume + 0.03); }
-            else { next.volume = target; clearInterval(fadeIn); }
+          fadeInTimer = setInterval(() => {
+            if (token !== switchSeq || active !== next) {
+              clearInterval(fadeInTimer);
+              return;
+            }
+            const target = baseVolume(next);
+            if (next.volume < target - 0.03) next.volume = Math.min(target, next.volume + 0.03);
+            else {
+              next.volume = target;
+              clearInterval(fadeInTimer);
+              fadeInTimer = null;
+            }
           }, 40);
-          active = next;
         };
 
         const unlock = () => {
@@ -271,7 +321,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260519-01';
+        const BUILD = '20260519-02';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -504,13 +554,21 @@
           const newStatus = clearRoundStatusEffects(data.statusEffects || {});
           const shouldTriggerSurprise = !data.surpriseTriggered
             && typeof data.surpriseAfter === 'number'
-            && data.qIndex === data.surpriseAfter;
+            && data.qIndex === data.surpriseAfter
+            && !data.surpriseEvent;
 
           if (shouldTriggerSurprise) {
             return {
               state: 'surprise',
               surpriseTriggered: true,
-              surpriseEvent: { ...surpriseEvent, answers: {}, deadline: now + SURPRISE_TIME_LIMIT * 1000 },
+              surpriseEvent: {
+                ...surpriseEvent,
+                id: `surprise_${data.qIndex}_${now}`,
+                sourceQIndex: data.qIndex,
+                answers: {},
+                deadline: now + SURPRISE_TIME_LIMIT * 1000,
+                resolved: false,
+              },
               buzzerWinner: null,
               buzzerOpenAt: 0,
               answerDeadline: null,
@@ -531,8 +589,9 @@
                 wrongAnswerers: [],
                 statusEffects: newStatus,
                 cardOverlay: null,
+                surpriseEvent: null,
               }
-            : { state: 'end', cardOverlay: null };
+            : { state: 'end', cardOverlay: null, surpriseEvent: null };
         };
 
         function App() {
@@ -559,6 +618,7 @@
           const [localAnswerResult, setLocalAnswerResult] = useState(null);  // {idx, isCorrect, scope:'regular'|'surprise'}
           const feedbackTimer = useRef(null);
           const surpriseResolving = useRef(false);
+          const surpriseAdvancing = useRef(false);
           const prevSurpriseResolvedAt = useRef(null);
           const localAnswerTimer = useRef(null);
 
@@ -809,6 +869,13 @@
             return () => clearInterval(iv);
           }, [roomData?.surpriseEvent?.deadline, roomData?.state]);
 
+          useEffect(() => {
+            if (roomData?.state !== 'surprise') {
+              surpriseResolving.current = false;
+              surpriseAdvancing.current = false;
+            }
+          }, [roomData?.state]);
+
           // 突發事件結算（host 監看：全員答完或時間到，結算後 3.5 秒進下一題）
           useEffect(() => {
             if (roomData?.state !== 'surprise' || !roomData?.surpriseEvent || myRole !== 'host') return;
@@ -817,14 +884,14 @@
               if (!ev) return;
               if (ev.resolved) {
                 // 已結算，等 3.5s 後推進
-                if (Date.now() > (ev.resolvedAt || 0) + 3500) advancePastSurprise();
+                if (Date.now() > (ev.resolvedAt || 0) + 3500) advancePastSurprise(ev.id);
                 return;
               }
               const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
               const answered = Object.keys(ev.answers || {});
               const allDone = joinedIds.length > 0 && joinedIds.every(id => answered.includes(id));
               const expired = Date.now() > ev.deadline;
-              if (allDone || expired) resolveSurpriseEvent();
+              if (allDone || expired) resolveSurpriseEvent(ev.id);
             };
             check();
             const iv = setInterval(check, 500);
@@ -1340,7 +1407,7 @@
           };
 
           // 結算突發事件：先寫入 resolved + results 讓所有人看到通知，3.5 秒後再進下一題
-          const resolveSurpriseEvent = async () => {
+          const resolveSurpriseEvent = async (expectedEventId = roomData?.surpriseEvent?.id) => {
             if (!roomData?.surpriseEvent || myRole !== 'host') return;
             if (roomData.surpriseEvent.resolved || surpriseResolving.current) return;
             surpriseResolving.current = true;
@@ -1348,6 +1415,7 @@
               await runRoomTransaction((data) => {
                 const ev = data.surpriseEvent;
                 if (data.state !== 'surprise' || !ev || ev.resolved) return null;
+                if (expectedEventId && ev.id !== expectedEventId) return null;
                 const newScores = { ...(data.scores || {}) };
                 const results = [];
                 const correctNames = [], wrongNames = [];
@@ -1386,19 +1454,23 @@
           };
 
           // 結算完 3.5 秒後推進到下一題（host 觸發、用 captured 值避免 stale state）
-          const advancePastSurprise = async () => {
+          const advancePastSurprise = async (expectedEventId = roomData?.surpriseEvent?.id) => {
             if (!roomData || myRole !== 'host') return;
             const ev = roomData.surpriseEvent;
             if (!ev?.resolved) return;
+            if (surpriseAdvancing.current) return;
+            surpriseAdvancing.current = true;
             const expectedResolvedAt = ev.resolvedAt;
             try {
-              await runRoomTransaction((data) => {
+              const result = await runRoomTransaction((data) => {
                 const freshEv = data.surpriseEvent;
                 if (data.state !== 'surprise' || !freshEv?.resolved) return null;
+                if (expectedEventId && freshEv.id !== expectedEventId) return null;
                 if (expectedResolvedAt && freshEv.resolvedAt !== expectedResolvedAt) return null;
                 const nextIdx = data.qIndex + 1;
                 const hasMore = nextIdx < (data.questions || []).length;
                 return {
+                  advanced: true,
                   updates: {
                     state: hasMore ? 'playing' : 'end',
                     qIndex: hasMore ? nextIdx : data.qIndex,
@@ -1411,7 +1483,9 @@
                   }
                 };
               });
+              if (!result?.advanced) surpriseAdvancing.current = false;
             } catch (e) {
+              surpriseAdvancing.current = false;
               showError("突發事件切換失敗：" + e.message);
             }
           };
