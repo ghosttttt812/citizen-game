@@ -301,7 +301,7 @@
           { id: 'c06', name: '輿論炎上',   desc: '指定一組：下回合禁止使用任何技能卡',                        type: 'card-ban'      },
           { id: 'c07', name: '民意支持',   desc: '護身符：遭受攻擊時可立即抵銷一次傷害（保留備用）',          type: 'shield'        },
           { id: 'c08', name: '朝野協商',   desc: '指定一組結盟：下回合對方答對，本組免費獲一半分數',          type: 'alliance'      },
-          { id: 'c09', name: '選區重劃',   desc: '全場選定項目（分數或共同卡）往左傳給下一組',                type: 'rotate'        },
+          { id: 'c09', name: '選區重劃',   desc: '全場分數往左傳給下一組',                                  type: 'rotate'        },
           { id: 'c10', name: '特別預算',   desc: '全場各加 10 分；本組另外再抽 1 張共同卡',                   type: 'all-bonus'     },
         ];
 
@@ -323,7 +323,7 @@
           control:     '指定任一院，直接沒收並「丟棄」他們手上的一張共同抽牌卡，並扣除對方 20 分（象徵糾舉失職）。',
         };
 
-        // ─── 規則說明用資料（直接搬自 rules.html）────────────────
+        // ─── 規則說明用資料（內建於主畫面）────────────────
         // 規則 modal 用：每張院專屬卡的色卡（依莫蘭迪色系）
         const RULES_EXCLUSIVE_CARDS = [
           { yuan:'立法院', color:'yuan-border-legislative', textColor:'yuan-text-legislative', tint:'yuan-tint-legislative', dot:'yuan-bg-legislative',
@@ -362,7 +362,7 @@
           { id:'c06', name:'輿論炎上', desc:'讓指定一組深陷公關危機，下一回合禁止使用任何技能卡（含院專屬卡）。', tag:'封印技能', tagColor:'bg-red-100 text-red-700', emoji:'🔥' },
           { id:'c07', name:'民意支持', desc:'護身符！可保留在手中。當遭受任何扣分攻擊時立即打出，完全抵銷該次攻擊。', tag:'完全防禦', tagColor:'bg-cyan-100 text-cyan-700', emoji:'🛡️' },
           { id:'c08', name:'朝野協商', desc:'指定另一組強行結盟。下一回合只要對方答題得分，本組免費獲得一半的分數。', tag:'結盟收益', tagColor:'bg-teal-100 text-teal-700', emoji:'🤜🤛' },
-          { id:'c09', name:'選區重劃', desc:'全場所有組別必須將選定項目（全部分數 或 全部共同卡）往左邊傳交給下一組。', tag:'全場大亂', tagColor:'bg-violet-100 text-violet-700', emoji:'🔄' },
+          { id:'c09', name:'選區重劃', desc:'全場所有組別必須將目前分數往左邊傳交給下一組。', tag:'全場大亂', tagColor:'bg-violet-100 text-violet-700', emoji:'🔄' },
           { id:'c10', name:'特別預算', desc:'國庫撥款！全場所有組別各加 10 分，本組另外再免費抽 1 張共同卡。', tag:'全場加分', tagColor:'bg-pink-100 text-pink-700', emoji:'💰' },
         ];
 
@@ -376,7 +376,7 @@
           c06: '讓指定的一組深陷公關危機。該組在「下一回合」中，雖然可以正常搶答得分，但「禁止發動任何卡牌技能（含五院專屬卡與共同卡）」。',
           c07: '這是一張「護身符」，可蓋牌保留在手中。當遭受任何扣分攻擊（包含五院專屬技能或其他卡牌）時可立即翻開，完全「抵銷該次攻擊」。',
           c08: '指定另一組強行結盟。在「下一回合」中，只要該組答題得分，發動此卡的組別也能「免費獲得一半的分數」。',
-          c09: '發動者可以自行選擇要更動「分數」或「牌卡」。全場五個組別必須將選定的項目（目前所有的分數，或手中所有未使用的共同牌卡），全部統一往左邊傳交給下一組。',
+          c09: '全場五個組別必須將目前所有分數，全部統一往左邊傳交給下一組。',
           c10: '國庫撥款！發動後，場上所有組別（包含自己）立刻各加 10 分。作為代價，發動此卡的組別可以在牌堆中免費「抽 1 張」新的共同卡。',
         };
 
@@ -384,27 +384,27 @@
 
         const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
 
-        // ── 突發事件題庫（隨機從五院挑一題：誰是該院院長）
-        // 第一個選項為正確答案（執行時會隨機洗牌）；老師可直接編輯姓名與圖檔路徑
-        // 圖片放在 images/ 資料夾，若檔案不存在會自動 fallback 顯示 emoji
-        // 院長照片放在專案根目錄，檔名即為當任院長姓名（會在送進 src 前 encodeURI）
-        const SURPRISE_EVENTS = [
-          { yuanId:'executive',   yuan:'行政院', img:'行政院院長-卓榮泰.jpg',   emoji:'🏛️',
-            text:'誰是現任行政院院長？',
-            options:['卓榮泰', '蘇貞昌', '陳建仁', '賴清德'], answer:0 },
-          { yuanId:'legislative', yuan:'立法院', img:'立法院院長-韓國瑜.jpg', emoji:'🏢',
-            text:'誰是現任立法院院長？',
-            options:['韓國瑜', '游錫堃', '王金平', '蘇嘉全'], answer:0 },
-          { yuanId:'judicial',    yuan:'司法院', img:'司法院院長-謝銘洋.jpg',    emoji:'⚖️',
-            text:'誰是現任司法院院長？',
-            options:['謝銘洋', '許宗力', '賴英照', '翁岳生'], answer:0 },
-          { yuanId:'control',     yuan:'監察院', img:'監察院院長-李鴻鈞.jpg',     emoji:'🔍',
-            text:'誰是現任監察院院長？',
-            options:['李鴻鈞', '陳菊', '張博雅', '王建煊'], answer:0 },
-          { yuanId:'examination', yuan:'考試院', img:'考試院院長-周弘憲_2.jpg', emoji:'📚',
-            text:'誰是現任考試院院長？',
-            options:['周弘憲', '黃榮村', '伍錦霖', '關中'], answer:0 },
+        const GROUP_IDS = ['group1','group2','group3','group4','group5'];
+
+        // 院長資料集中在這裡：未來換人時，只要更新 leader、img、distractors。
+        const YUAN_LEADERS = [
+          { yuanId:'executive',   yuan:'行政院', emoji:'🏛️', leader:'卓榮泰', img:'行政院院長-卓榮泰.jpg',   distractors:['蘇貞昌', '陳建仁', '賴清德'] },
+          { yuanId:'legislative', yuan:'立法院', emoji:'🏢', leader:'韓國瑜', img:'立法院院長-韓國瑜.jpg', distractors:['游錫堃', '王金平', '蘇嘉全'] },
+          { yuanId:'judicial',    yuan:'司法院', emoji:'⚖️', leader:'謝銘洋', img:'司法院院長-謝銘洋.jpg',    distractors:['許宗力', '賴英照', '翁岳生'] },
+          { yuanId:'control',     yuan:'監察院', emoji:'🔍', leader:'李鴻鈞', img:'監察院院長-李鴻鈞.jpg',     distractors:['陳菊', '張博雅', '王建煊'] },
+          { yuanId:'examination', yuan:'考試院', emoji:'📚', leader:'周弘憲', img:'考試院院長-周弘憲_2.jpg', distractors:['黃榮村', '伍錦霖', '關中'] },
         ];
+
+        // ── 突發事件題庫（隨機從五院挑一題：誰是該院院長）
+        const SURPRISE_EVENTS = YUAN_LEADERS.map(l => ({
+          yuanId: l.yuanId,
+          yuan: l.yuan,
+          img: l.img,
+          emoji: l.emoji,
+          text: `誰是現任${l.yuan}院長？`,
+          options: [l.leader, ...l.distractors],
+          answer: 0,
+        }));
         // 兩種題型隨機：
         //   name   — 「誰是 X院 的院長？」    選項是人名
         //   yuan   — 「這是哪個院的院長？」  選項是院名（不顯示「關於 X院」標題）
@@ -432,6 +432,108 @@
         const ANSWER_TIME_LIMIT = 15;  // 答題時間上限（秒）
         const SURPRISE_TIME_LIMIT = 15; // 突發事件作答時間（秒）
         const SURPRISE_POINTS = 80;     // 突發事件答對得分（雙倍）
+
+        const createStatusEffects = () => GROUP_IDS.reduce((acc, gid) => {
+          acc[gid] = { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false };
+          return acc;
+        }, {});
+
+        const clonePlain = (value, fallback = {}) => JSON.parse(JSON.stringify(value ?? fallback));
+
+        const joinedGroupIds = (teams = {}) =>
+          Object.values(teams).filter(t => t.joined).map(t => t.id);
+
+        const clearRoundStatusEffects = (statusEffects = {}) => {
+          const next = clonePlain(statusEffects);
+          Object.keys(next).forEach(gid => {
+            next[gid].cardBanned = false;
+            next[gid].mustPayExam = false;
+            next[gid].shielded = false;
+          });
+          return next;
+        };
+
+        const applyExamPayment = (data, role, scoresIn) => {
+          const newScores = { ...(scoresIn || {}) };
+          const mustPay = data.statusEffects?.[role]?.mustPayExam;
+          if (!mustPay) return { newScores, paid: false, examGroupId: null };
+          const examTeam = Object.values(data.teams || {}).find(t => t.yuan?.id === 'examination' && t.joined);
+          if (!examTeam || examTeam.id === role) return { newScores, paid: false, examGroupId: null };
+          newScores[role] = Math.max(0, (newScores[role] || 0) - 10);
+          newScores[examTeam.id] = (newScores[examTeam.id] || 0) + 10;
+          return { newScores, paid: true, examGroupId: examTeam.id, examYuan: examTeam.yuan?.name };
+        };
+
+        const buildWrongAnswerUpdate = (data, role, reason, now) => {
+          const yuanName = data.teams?.[role]?.yuan?.name || '本組';
+          const pay = applyExamPayment(data, role, data.scores || {});
+          const payLog = pay.paid ? `（先繳 10 分給 ${pay.examYuan}）` : '';
+          const newScores = { ...pay.newScores, [role]: Math.max(0, (pay.newScores[role] || 0) - WRONG_PENALTY) };
+          const wrongSet = new Set(data.wrongAnswerers || []);
+          wrongSet.add(role);
+          const newWrong = Array.from(wrongSet);
+          const remaining = joinedGroupIds(data.teams).filter(k => newScores[k] > 0 && !newWrong.includes(k));
+
+          if (remaining.length === 0) {
+            return {
+              shouldAdvance: true,
+              updates: {
+                scores: newScores,
+                buzzerWinner: null,
+                wrongAnswerers: [],
+                answerDeadline: null,
+                actionLog: [`❌ ${yuanName} ${reason}！全員作答完畢，跳過本題${payLog}`, ...(data.actionLog || [])].slice(0, 5)
+              }
+            };
+          }
+
+          return {
+            shouldAdvance: false,
+            updates: {
+              scores: newScores,
+              buzzerWinner: null,
+              answerDeadline: null,
+              wrongAnswerers: newWrong,
+              buzzerOpenAt: now + BUZZ_DELAY_RETRY * 1000,
+              actionLog: [`❌ ${yuanName} ${reason}！換人搶答 (-${WRONG_PENALTY} 分)${payLog}`, ...(data.actionLog || [])].slice(0, 5)
+            }
+          };
+        };
+
+        const buildNextQuestionUpdate = (data, now, surpriseEvent) => {
+          const newStatus = clearRoundStatusEffects(data.statusEffects || {});
+          const shouldTriggerSurprise = !data.surpriseTriggered
+            && typeof data.surpriseAfter === 'number'
+            && data.qIndex === data.surpriseAfter;
+
+          if (shouldTriggerSurprise) {
+            return {
+              state: 'surprise',
+              surpriseTriggered: true,
+              surpriseEvent: { ...surpriseEvent, answers: {}, deadline: now + SURPRISE_TIME_LIMIT * 1000 },
+              buzzerWinner: null,
+              buzzerOpenAt: 0,
+              answerDeadline: null,
+              wrongAnswerers: [],
+              statusEffects: newStatus,
+              cardOverlay: null,
+              actionLog: [`🚨 突發事件！全員作答（答對 +${SURPRISE_POINTS} / 答錯 -${WRONG_PENALTY}）`, ...(data.actionLog || [])].slice(0, 5),
+            };
+          }
+
+          return data.qIndex + 1 < (data.questions || []).length
+            ? {
+                qIndex: data.qIndex + 1,
+                buzzerWinner: null,
+                state: 'playing',
+                buzzerOpenAt: now + BUZZ_DELAY_NEW_Q * 1000,
+                answerDeadline: null,
+                wrongAnswerers: [],
+                statusEffects: newStatus,
+                cardOverlay: null,
+              }
+            : { state: 'end', cardOverlay: null };
+        };
 
         function App() {
           const [user, setUser] = useState(null);
@@ -547,11 +649,16 @@
               const timer = setTimeout(() => setSyncCountdown(syncCountdown - 1), 1000);
               return () => clearTimeout(timer);
             } else if (syncCountdown === 0 && myRole === 'host') {
-              db.collection('rooms_v2').doc(roomCode).update({
-                state: 'playing',
-                buzzerOpenAt: Date.now() + BUZZ_DELAY_NEW_Q * 1000,
-                wrongAnswerers: []
-              });
+              runRoomTransaction((data) => {
+                if (data.state !== 'countdown') return null;
+                return {
+                  updates: {
+                    state: 'playing',
+                    buzzerOpenAt: Date.now() + BUZZ_DELAY_NEW_Q * 1000,
+                    wrongAnswerers: []
+                  }
+                };
+              }).catch(() => {});
             }
           }, [syncCountdown]);
 
@@ -672,10 +779,17 @@
             const hb = roomData.heartbeats?.host;
             if (!hb || hb === 0) return; // host 從未連過，不誤判
             if (Date.now() - hb > 60000) {
-              db.collection('rooms_v2').doc(roomCode).update({
-                state: 'end',
-                cardOverlay: null,
-                actionLog: ['💀 老師端斷線，遊戲強制結束！', ...(roomData.actionLog || [])].slice(0, 5)
+              runRoomTransaction((data) => {
+                if (!['playing', 'countdown', 'surprise'].includes(data.state)) return null;
+                const freshHb = data.heartbeats?.host;
+                if (!freshHb || Date.now() - freshHb <= 60000) return null;
+                return {
+                  updates: {
+                    state: 'end',
+                    cardOverlay: null,
+                    actionLog: ['💀 老師端斷線，遊戲強制結束！', ...(data.actionLog || [])].slice(0, 5)
+                  }
+                };
               }).catch(() => {});
             }
           }, [roomData]);
@@ -724,9 +838,15 @@
             if (playerGroup !== myRole) return;
             const delay = Math.max(0, showUntil - Date.now());
             const timer = setTimeout(() => {
-              db.collection('rooms_v2').doc(roomCode).update({
-                cardOverlay: null,
-                buzzerOpenAt: Date.now() + Math.max(500, remainingMs),
+              runRoomTransaction((data) => {
+                const ov = data.cardOverlay;
+                if (!ov || ov.playerGroup !== playerGroup || ov.showUntil !== showUntil) return null;
+                return {
+                  updates: {
+                    cardOverlay: null,
+                    buzzerOpenAt: Date.now() + Math.max(500, remainingMs),
+                  }
+                };
               }).catch(() => {});
             }, delay);
             return () => clearTimeout(timer);
@@ -750,6 +870,17 @@
           // ── 遊戲邏輯 ─────────────────────────────────────────
 
           const roomRef = () => db.collection('rooms_v2').doc(roomCode);
+          const runRoomTransaction = (mutator) => {
+            const ref = roomRef();
+            return db.runTransaction(async (transaction) => {
+              const snap = await transaction.get(ref);
+              if (!snap.exists) throw new Error('房間不存在或已由房主關閉。');
+              const data = snap.data();
+              const result = mutator(data);
+              if (result?.updates) transaction.update(ref, result.updates);
+              return result || null;
+            });
+          };
 
           // 選院時先跳出說明 + 抽卡確認
           const handleGroupSelect = (t) => {
@@ -793,13 +924,7 @@
                 hands: buildInitialHands(),
                 lastRoundWinner: null,
                 lastRoundPoints: 0,
-                statusEffects: {
-                  group1: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                  group2: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                  group3: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                  group4: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                  group5: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                },
+                statusEffects: createStatusEffects(),
                 questions: shuffle(QUESTION_BANK).slice(0, 12),
                 qIndex: 0, buzzerWinner: null,
                 buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
@@ -831,432 +956,499 @@
             if (!roomData) return;
             if (roomData.teams[gid].joined) { showError("手腳太慢！此組別已被選走了。"); return; }
             try {
-              await roomRef().update({ [`teams.${gid}.joined`]: true, [`teams.${gid}.uid`]: user.uid });
+              await runRoomTransaction((data) => {
+                if (data.state !== 'lobby') throw new Error('遊戲已開始，無法再選擇陣營。');
+                if (!data.teams?.[gid]) throw new Error('找不到這個陣營。');
+                if (data.teams[gid].joined) throw new Error('手腳太慢！此組別已被選走了。');
+                return {
+                  updates: {
+                    [`teams.${gid}.joined`]: true,
+                    [`teams.${gid}.uid`]: user.uid,
+                    [`heartbeats.${gid}`]: Date.now(),
+                  }
+                };
+              });
               setMyRole(gid);
             } catch (e) { showError("選擇組別時發生錯誤：" + e.message); }
           };
 
           const leaveRoom = () => { setRoomCode(''); setRoomData(null); setMyRole(null); };
 
-          const startSync = () => {
-            roomRef().update({
-              state: 'countdown',
-              startTime: Date.now() + 5000,
-              actionLog: ['🎲 5秒後正式開始！', ...roomData.actionLog].slice(0, 5)
-            });
+          const startSync = async () => {
+            try {
+              await runRoomTransaction((data) => {
+                if (data.state !== 'lobby') throw new Error('目前不能啟動遊戲。');
+                return {
+                  updates: {
+                    state: 'countdown',
+                    startTime: Date.now() + 5000,
+                    actionLog: ['🎲 5秒後正式開始！', ...(data.actionLog || [])].slice(0, 5)
+                  }
+                };
+              });
+            } catch (e) {
+              showError("啟動失敗：" + e.message);
+            }
           };
 
-          const handleBuzz = () => {
+          const handleBuzz = async () => {
             if (roomData.buzzerWinner) return;
             if ((roomData.scores[myRole] || 0) <= 0) return;
             if ((roomData.wrongAnswerers || []).includes(myRole)) return;
-            // 有優先搶答權的人可直接搶，其他人要等倒數結束
-            const hasPriority = roomData.statusEffects?.[myRole]?.priorityBuzz;
-            if (!hasPriority && Date.now() < roomData.buzzerOpenAt) return;
-            // 清除 priorityBuzz 效果
-            const newStatus = JSON.parse(JSON.stringify(roomData.statusEffects || {}));
-            if (newStatus[myRole]) newStatus[myRole].priorityBuzz = false;
-            roomRef().update({
-              buzzerWinner: myRole,
-              answerDeadline: Date.now() + ANSWER_TIME_LIMIT * 1000,
-              statusEffects: newStatus,
-            });
-          };
-
-          // 銓敘權：若 myRole 身上有 mustPayExam，扣 10 給考試院（回傳新分數與是否有扣）
-          const applyExamPayment = (scoresIn) => {
-            const newScores = { ...scoresIn };
-            const mustPay = roomData.statusEffects?.[myRole]?.mustPayExam;
-            if (!mustPay) return { newScores, paid: false, examGroupId: null };
-            const examTeam = Object.values(roomData.teams).find(t => t.yuan?.id === 'examination' && t.joined);
-            if (!examTeam || examTeam.id === myRole) return { newScores, paid: false, examGroupId: null };
-            newScores[myRole] = Math.max(0, (newScores[myRole] || 0) - 10);
-            newScores[examTeam.id] = (newScores[examTeam.id] || 0) + 10;
-            return { newScores, paid: true, examGroupId: examTeam.id, examYuan: examTeam.yuan?.name };
-          };
-
-          const handleAnswer = (idx) => {
-            const isCorrect = idx === roomData.questions[roomData.qIndex].answer;
-            const myYuan = roomData.teams[myRole].yuan.name;
-            const myYuanText = roomData.teams[myRole].yuan.text;
-
-            // 立刻給自己視覺反饋（不必等 Firestore 回 ack）
-            const localPoints = isCorrect
-              ? (roomData.statusEffects?.[myRole]?.doublePoints ? CORRECT_POINTS * 2 : CORRECT_POINTS)
-              : -WRONG_PENALTY;
-            markLocalAnswer(idx, isCorrect, 'regular', myYuan, myYuanText, localPoints);
-
-            // 銓敘權影響：先繳 10 分給考試院（若本人有 mustPayExam）
-            const pay = applyExamPayment(roomData.scores);
-            const payLog = pay.paid ? `（先繳 10 分給 ${pay.examYuan}）` : '';
-
-            if (isCorrect) {
-              const isDouble = roomData.statusEffects?.[myRole]?.doublePoints;
-              const gained = isDouble ? CORRECT_POINTS * 2 : CORRECT_POINTS;
-              const newScores = { ...pay.newScores, [myRole]: (pay.newScores[myRole] || 0) + gained };
-              // 清除本人 doublePoints 效果
-              const newStatus = { ...roomData.statusEffects };
-              if (newStatus[myRole]) newStatus[myRole] = { ...newStatus[myRole], doublePoints: false };
-              roomRef().update({
-                scores: newScores,
-                statusEffects: newStatus,
-                answerDeadline: null,
-                lastRoundWinner: myRole,
-                lastRoundPoints: gained,
-                actionLog: [`✅ ${myYuan} 答對！+${gained} 分${isDouble ? '（重大建設加倍！）' : ''}${payLog}`, ...roomData.actionLog].slice(0, 5)
+            try {
+              await runRoomTransaction((data) => {
+                const now = Date.now();
+                if (data.state !== 'playing') throw new Error('目前不是搶答時間。');
+                if (data.buzzerWinner) return null;
+                if ((data.scores?.[myRole] || 0) <= 0) throw new Error('已淘汰，無法搶答。');
+                if ((data.wrongAnswerers || []).includes(myRole)) throw new Error('本題已作答過。');
+                const hasPriority = data.statusEffects?.[myRole]?.priorityBuzz;
+                if (!hasPriority && now < data.buzzerOpenAt) throw new Error('搶答倒數尚未結束。');
+                const newStatus = clonePlain(data.statusEffects || {});
+                if (newStatus[myRole]) newStatus[myRole].priorityBuzz = false;
+                return {
+                  updates: {
+                    buzzerWinner: myRole,
+                    answerDeadline: now + ANSWER_TIME_LIMIT * 1000,
+                    statusEffects: newStatus,
+                  }
+                };
               });
-              setTimeout(() => nextQ(), 1500);
-            } else {
-              applyWrongAnswer(myYuan, '答錯');
+            } catch (e) {
+              showError("搶答失敗：" + e.message);
+            }
+          };
+
+          const handleAnswer = async (idx) => {
+            if (!roomData || myRole !== roomData.buzzerWinner || roomData.state !== 'playing') return;
+            try {
+              const result = await runRoomTransaction((data) => {
+                const now = Date.now();
+                if (data.state !== 'playing') throw new Error('目前不是作答時間。');
+                if (data.buzzerWinner !== myRole) throw new Error('本題已由其他組處理。');
+                if (!data.answerDeadline) throw new Error('本題已結算。');
+                const q = data.questions?.[data.qIndex];
+                if (!q) throw new Error('找不到目前題目。');
+
+                const isCorrect = idx === q.answer;
+                if (isCorrect) {
+                  const team = data.teams[myRole];
+                  const isDouble = data.statusEffects?.[myRole]?.doublePoints;
+                  const gained = isDouble ? CORRECT_POINTS * 2 : CORRECT_POINTS;
+                  const pay = applyExamPayment(data, myRole, data.scores || {});
+                  const payLog = pay.paid ? `（先繳 10 分給 ${pay.examYuan}）` : '';
+                  const newScores = { ...pay.newScores, [myRole]: (pay.newScores[myRole] || 0) + gained };
+                  const newStatus = clonePlain(data.statusEffects || {});
+                  if (newStatus[myRole]) newStatus[myRole].doublePoints = false;
+                  return {
+                    shouldAdvance: true,
+                    qIndex: data.qIndex,
+                    isCorrect,
+                    yuanName: team?.yuan?.name,
+                    yuanText: team?.yuan?.text,
+                    points: gained,
+                    updates: {
+                      scores: newScores,
+                      statusEffects: newStatus,
+                      answerDeadline: null,
+                      lastRoundWinner: myRole,
+                      lastRoundPoints: gained,
+                      actionLog: [`✅ ${team?.yuan?.name} 答對！+${gained} 分${isDouble ? '（重大建設加倍！）' : ''}${payLog}`, ...(data.actionLog || [])].slice(0, 5)
+                    }
+                  };
+                }
+
+                const wrong = buildWrongAnswerUpdate(data, myRole, '答錯', now);
+                const team = data.teams[myRole];
+                return {
+                  ...wrong,
+                  qIndex: data.qIndex,
+                  isCorrect,
+                  yuanName: team?.yuan?.name,
+                  yuanText: team?.yuan?.text,
+                  points: -WRONG_PENALTY,
+                };
+              });
+
+              if (!result) return;
+              markLocalAnswer(idx, result.isCorrect, 'regular', result.yuanName, result.yuanText, result.points);
+              if (result.shouldAdvance) setTimeout(() => nextQ(result.qIndex), 1500);
+            } catch (e) {
+              showError("送出答案失敗：" + e.message);
             }
           };
 
           const handleTimeout = () => {
             if (!roomData || myRole !== roomData.buzzerWinner || roomData.state !== 'playing') return;
-            applyWrongAnswer(roomData.teams[myRole].yuan.name, '超時');
+            commitWrongAnswer('超時');
           };
 
           // 答錯/超時的共用邏輯
-          const applyWrongAnswer = (yuanName, reason) => {
-            // 銓敘權：答錯/超時也算「答題」，要繳費
-            const pay = applyExamPayment(roomData.scores);
-            const payLog = pay.paid ? `（先繳 10 分給 ${pay.examYuan}）` : '';
-            const newScores = { ...pay.newScores, [myRole]: Math.max(0, (pay.newScores[myRole] || 0) - WRONG_PENALTY) };
-            const newWrong = [...(roomData.wrongAnswerers || []), myRole];
-            // 只考慮已加入的組別，避免未加入組別卡住流程
-            const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
-            const remaining = joinedIds.filter(k => newScores[k] > 0 && !newWrong.includes(k));
-
-            if (remaining.length === 0) {
-              roomRef().update({
-                scores: newScores, buzzerWinner: null, wrongAnswerers: [], answerDeadline: null,
-                actionLog: [`❌ ${yuanName} ${reason}！全員作答完畢，跳過本題${payLog}`, ...roomData.actionLog].slice(0, 5)
+          const commitWrongAnswer = async (reason) => {
+            try {
+              const result = await runRoomTransaction((data) => {
+                if (data.state !== 'playing') throw new Error('目前不是作答時間。');
+                if (data.buzzerWinner !== myRole) throw new Error('本題已由其他組處理。');
+                if (!data.answerDeadline) throw new Error('本題已結算。');
+                return { ...buildWrongAnswerUpdate(data, myRole, reason, Date.now()), qIndex: data.qIndex };
               });
-              setTimeout(() => nextQ(), 1500);
-            } else {
-              roomRef().update({
-                scores: newScores, buzzerWinner: null, answerDeadline: null,
-                wrongAnswerers: newWrong,
-                buzzerOpenAt: Date.now() + BUZZ_DELAY_RETRY * 1000,
-                actionLog: [`❌ ${yuanName} ${reason}！換人搶答 (-${WRONG_PENALTY} 分)${payLog}`, ...roomData.actionLog].slice(0, 5)
-              });
+              if (result?.shouldAdvance) setTimeout(() => nextQ(result.qIndex), 1500);
+            } catch (e) {
+              showError(`${reason}結算失敗：` + e.message);
             }
           };
 
           // 發動技能卡
-          const playCard = (card, targetId = null) => {
+          const playCard = async (card, targetId = null) => {
             if (!roomData || !myRole || myRole === 'host') return;
             if (roomData.statusEffects?.[myRole]?.cardBanned) { showError('本回合被輿論炎上，無法發動技能卡！'); return; }
             // 同一題只能發動一張（usedOnQ === 本題 index）
             const myHand = roomData.hands?.[myRole] || [];
             if (myHand.some(c => c.usedOnQ === roomData.qIndex)) { showError('本回合只能發動一張技能卡！'); return; }
 
-            sound.draw();
-            const myYuan = roomData.teams[myRole].yuan.name;
-            const targetYuan = targetId ? roomData.teams[targetId]?.yuan?.name : null;
-            let scores = { ...roomData.scores };
-            let statusEffects = JSON.parse(JSON.stringify(roomData.statusEffects || {}));
-            let hands = JSON.parse(JSON.stringify(roomData.hands || {}));
-            let log = `⚡ ${myYuan} 發動「${card.name}」`;
+            const extraCommon = shuffle(COMMON_CARD_POOL)[0];
+            const randomRoll = Math.random();
+            const actionId = Date.now();
+            try {
+              const result = await runRoomTransaction((data) => {
+                const now = Date.now();
+                if (data.state !== 'playing') throw new Error('目前不是出牌時間。');
+                if (data.buzzerWinner) throw new Error('已有人搶答，不能再出牌。');
+                if (data.cardOverlay) throw new Error('目前正在結算其他技能。');
+                if (now >= data.buzzerOpenAt) throw new Error('搶答已開放，不能再出牌。');
+                if (data.statusEffects?.[myRole]?.cardBanned) throw new Error('本回合被輿論炎上，無法發動技能卡。');
 
-            // 標記為已使用（記錄用在第幾題）
-            hands[myRole] = hands[myRole].map(c =>
-              c.uniqueId === card.uniqueId ? { ...c, usedOnQ: roomData.qIndex } : c
-            );
+                const freshHand = data.hands?.[myRole] || [];
+                const activeCard = freshHand.find(c => c.uniqueId === card.uniqueId);
+                if (!activeCard) throw new Error('找不到這張技能卡。');
+                if (activeCard.usedOnQ !== null) throw new Error('這張技能卡已使用。');
+                if (freshHand.some(c => c.usedOnQ === data.qIndex)) throw new Error('本回合只能發動一張技能卡。');
 
-            // 效果處理
-            switch (card.type) {
-              case 'target':
-                if (targetId) {
-                  // 民意支持 / 反彈卡 / 銓敘權 護盾擋下傷害
-                  if (statusEffects[targetId]?.shielded) {
-                    statusEffects[targetId].shielded = false; // 消耗護盾
-                    log += `，但 ${targetYuan} 護盾抵銷了傷害！`;
-                  } else {
-                    scores[targetId] = Math.max(0, (scores[targetId] || 0) - (card.dmg || 50));
-                    if (card.id === 'con' && hands[targetId]) {
-                      const ci = hands[targetId].findIndex(c => !c.isExclusive && c.usedOnQ === null);
-                      if (ci !== -1) hands[targetId][ci].usedOnQ = -1; // -1 = 被棄置
+                const needsTarget = ['target','steal-exclusive','steal-common','card-ban','alliance'].includes(activeCard.type);
+                if (needsTarget) {
+                  if (!targetId || targetId === myRole) throw new Error('請選擇有效目標。');
+                  if (!data.teams?.[targetId]?.joined) throw new Error('目標尚未加入遊戲。');
+                  if ((data.scores?.[targetId] ?? 0) <= 0) throw new Error('目標已淘汰。');
+                }
+
+                const myYuan = data.teams[myRole]?.yuan?.name;
+                const targetYuan = targetId ? data.teams[targetId]?.yuan?.name : null;
+                let scores = { ...(data.scores || {}) };
+                let statusEffects = clonePlain(data.statusEffects || {});
+                let hands = clonePlain(data.hands || {});
+                let log = `⚡ ${myYuan} 發動「${activeCard.name}」`;
+
+                hands[myRole] = hands[myRole].map(c =>
+                  c.uniqueId === activeCard.uniqueId ? { ...c, usedOnQ: data.qIndex } : c
+                );
+
+                switch (activeCard.type) {
+                  case 'target':
+                    if (statusEffects[targetId]?.shielded) {
+                      statusEffects[targetId].shielded = false;
+                      log += `，但 ${targetYuan} 護盾抵銷了傷害！`;
+                    } else {
+                      scores[targetId] = Math.max(0, (scores[targetId] || 0) - (activeCard.dmg || 50));
+                      if (activeCard.id === 'con' && hands[targetId]) {
+                        const ci = hands[targetId].findIndex(c => !c.isExclusive && c.usedOnQ === null);
+                        if (ci !== -1) hands[targetId][ci].usedOnQ = -1;
+                      }
+                      log += `，鎖定 ${targetYuan}（-${activeCard.dmg || 50} 分）`;
                     }
-                    log += `，鎖定 ${targetYuan}（-${card.dmg || 50} 分）`;
-                  }
+                    break;
+                  case 'self':
+                    if (!statusEffects[myRole]) statusEffects[myRole] = {};
+                    statusEffects[myRole].shielded = true;
+                    Object.keys(statusEffects).forEach(gid => {
+                      if (gid !== myRole) {
+                        if (!statusEffects[gid]) statusEffects[gid] = {};
+                        statusEffects[gid].mustPayExam = true;
+                      }
+                    });
+                    log += `，本回合免疫扣分；其他院答題前須繳 10 分給 ${myYuan}`;
+                    break;
+                  case 'redistribute':
+                    { const entries = Object.entries(scores).sort((a,b) => b[1]-a[1]);
+                      const top = entries[0][0], bot = entries[entries.length-1][0];
+                      if (top !== bot) { scores[top] = Math.max(0, scores[top]-20); scores[bot] += 20; }
+                      log += `，${data.teams[top]?.yuan?.name} 轉移 20 分給 ${data.teams[bot]?.yuan?.name}`; }
+                    break;
+                  case 'all-bonus':
+                    Object.keys(scores).forEach(k => { scores[k] = (scores[k]||0) + 10; });
+                    hands[myRole].push({ ...extraCommon, uniqueId: `${myRole}_extra_${actionId}`, isExclusive: false, usedOnQ: null });
+                    log += `，全場各 +10 分，本組再抽一張共同卡`;
+                    break;
+                  case 'double-points':
+                    if (!statusEffects[myRole]) statusEffects[myRole] = {};
+                    statusEffects[myRole].doublePoints = true;
+                    log += `，本回合答對得 80 分`;
+                    break;
+                  case 'card-ban':
+                    if (!statusEffects[targetId]) statusEffects[targetId] = {};
+                    statusEffects[targetId].cardBanned = true;
+                    log += `，${targetYuan} 下回合禁用技能卡`;
+                    break;
+                  case 'reactive':
+                  case 'shield':
+                    if (!statusEffects[myRole]) statusEffects[myRole] = {};
+                    statusEffects[myRole].shielded = true;
+                    log += `，已設置防禦護盾`;
+                    break;
+                  case 'priority-next':
+                    if (!statusEffects[myRole]) statusEffects[myRole] = {};
+                    statusEffects[myRole].priorityBuzz = true;
+                    log += `，下一回合享優先搶答權`;
+                    break;
+                  case 'auto':
+                    { const lw = data.lastRoundWinner, lp = data.lastRoundPoints || 0;
+                      if (lw && lp > 0) {
+                        scores[lw] = Math.max(0, (scores[lw]||0) - lp);
+                        log += `，撤銷 ${data.teams[lw]?.yuan?.name} 上回合得分 (-${lp} 分)`;
+                      } else { log += `，上回合無可撤銷的得分`; } }
+                    break;
+                  case 'steal-exclusive':
+                    if (hands[targetId]) {
+                      const ti = hands[targetId].findIndex(c => c.isExclusive && c.usedOnQ === null);
+                      if (ti !== -1) {
+                        const stolen = hands[targetId][ti];
+                        hands[targetId][ti] = { ...stolen, usedOnQ: -1 };
+                        hands[myRole].push({
+                          ...stolen,
+                          uniqueId: `${myRole}_stole_exc_${actionId}`,
+                          usedOnQ: null,
+                        });
+                        log += `，奪走 ${targetYuan} 的【${stolen.name}】納為己用`;
+                      } else {
+                        log += `，${targetYuan} 已無院專屬技能可奪`;
+                      }
+                    }
+                    break;
+                  case 'rotate':
+                    {
+                      const oldScores = { ...scores };
+                      GROUP_IDS.forEach((gid, i) => {
+                        const nextGid = GROUP_IDS[(i + 1) % GROUP_IDS.length];
+                        scores[gid] = oldScores[nextGid] ?? 0;
+                      });
+                      log += `，全場分數左移：第5→4、第4→3、第3→2、第2→1、第1→5`;
+                    }
+                    break;
+                  case 'steal-common':
+                    if (hands[targetId]) {
+                      const candidates = [];
+                      hands[targetId].forEach((c, idx) => {
+                        if (!c.isExclusive && c.usedOnQ === null) candidates.push({ c, idx });
+                      });
+                      if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(randomRoll * candidates.length)];
+                        const stolen = pick.c;
+                        hands[targetId][pick.idx] = { ...stolen, usedOnQ: -1 };
+                        hands[myRole].push({
+                          ...stolen,
+                          uniqueId: `${myRole}_stole_com_${actionId}`,
+                          usedOnQ: null,
+                        });
+                        log += `，盲抽 ${targetYuan} 的【${stolen.name}】納為己用`;
+                      } else {
+                        log += `，${targetYuan} 無可偷的共同卡`;
+                      }
+                    }
+                    break;
+                  default:
+                    log += `（效果開發中）`;
                 }
-                break;
-              case 'self':
-                // 考試院 銓敘權：本人免疫扣分；其他院本回合答題前要繳 10 分
-                if (!statusEffects[myRole]) statusEffects[myRole] = {};
-                statusEffects[myRole].shielded = true;
-                Object.keys(statusEffects).forEach(gid => {
-                  if (gid !== myRole) {
-                    if (!statusEffects[gid]) statusEffects[gid] = {};
-                    statusEffects[gid].mustPayExam = true;
-                  }
-                });
-                log += `，本回合免疫扣分；其他院答題前須繳 10 分給 ${myYuan}`;
-                break;
-              case 'redistribute':
-                { const entries = Object.entries(scores).sort((a,b) => b[1]-a[1]);
-                  const top = entries[0][0], bot = entries[entries.length-1][0];
-                  if (top !== bot) { scores[top] = Math.max(0, scores[top]-20); scores[bot] += 20; }
-                  log += `，${roomData.teams[top]?.yuan?.name} 轉移 20 分給 ${roomData.teams[bot]?.yuan?.name}`; }
-                break;
-              case 'all-bonus':
-                Object.keys(scores).forEach(k => { scores[k] = (scores[k]||0) + 10; });
-                { const extra = shuffle(COMMON_CARD_POOL)[0];
-                  hands[myRole].push({ ...extra, uniqueId: `${myRole}_extra_${Date.now()}`, isExclusive: false, usedOnQ: null }); }
-                log += `，全場各 +10 分，本組再抽一張共同卡`;
-                break;
-              case 'double-points':
-                if (!statusEffects[myRole]) statusEffects[myRole] = {};
-                statusEffects[myRole].doublePoints = true;
-                log += `，本回合答對得 80 分`;
-                break;
-              case 'card-ban':
+
+                const remainingMs = Math.max(500, data.buzzerOpenAt - now);
+                let targetDelta = null;
                 if (targetId) {
-                  if (!statusEffects[targetId]) statusEffects[targetId] = {};
-                  statusEffects[targetId].cardBanned = true;
-                  log += `，${targetYuan} 下回合禁用技能卡`;
+                  const before = data.scores?.[targetId] ?? 0;
+                  const after = scores[targetId] ?? 0;
+                  if (before !== after) targetDelta = after - before;
                 }
-                break;
-              case 'reactive':
-              case 'shield':
-                if (!statusEffects[myRole]) statusEffects[myRole] = {};
-                statusEffects[myRole].shielded = true;
-                log += `，已設置防禦護盾`;
-                break;
-              case 'priority-next':
-                if (!statusEffects[myRole]) statusEffects[myRole] = {};
-                statusEffects[myRole].priorityBuzz = true;
-                log += `，下一回合享優先搶答權`;
-                break;
-              case 'auto':
-                { const lw = roomData.lastRoundWinner, lp = roomData.lastRoundPoints || 0;
-                  if (lw && lp > 0) {
-                    scores[lw] = Math.max(0, (scores[lw]||0) - lp);
-                    log += `，撤銷 ${roomData.teams[lw]?.yuan?.name} 上回合得分 (-${lp} 分)`;
-                  } else { log += `，上回合無可撤銷的得分`; } }
-                break;
-              case 'steal-exclusive':
-                // 機密外洩：奪走指定院的院專屬技能卡
-                if (targetId && hands[targetId]) {
-                  const ti = hands[targetId].findIndex(c => c.isExclusive && c.usedOnQ === null);
-                  if (ti !== -1) {
-                    const stolen = hands[targetId][ti];
-                    // 對方失去（標記為棄置）
-                    hands[targetId][ti] = { ...stolen, usedOnQ: -1 };
-                    // 我方獲得一張新拷貝（重置 usedOnQ 才能立即使用）
-                    hands[myRole].push({
-                      ...stolen,
-                      uniqueId: `${myRole}_stole_exc_${Date.now()}`,
-                      usedOnQ: null,
-                    });
-                    log += `，奪走 ${targetYuan} 的【${stolen.name}】納為己用`;
-                  } else {
-                    log += `，${targetYuan} 已無院專屬技能可奪`;
+
+                return {
+                  played: true,
+                  updates: {
+                    scores, hands, statusEffects,
+                    buzzerOpenAt: now + 999999,
+                    cardOverlay: {
+                      playerGroup: myRole,
+                      yuanName: myYuan,
+                      cardName: activeCard.name,
+                      cardDesc: activeCard.desc,
+                      log,
+                      targetGroup: targetId || null,
+                      targetYuanName: targetYuan || null,
+                      targetDelta,
+                      remainingMs,
+                      showUntil: now + 5000,
+                    },
+                    actionLog: [log, ...(data.actionLog || [])].slice(0, 5)
                   }
-                }
-                break;
-              case 'rotate':
-                // 選區重劃：全場分數往左輪轉一格
-                // 規則：第N組的新分數 = 第N+1組的原分數（第5組接第1組）
-                {
-                  const ROT_GIDS = ['group1','group2','group3','group4','group5'];
-                  const oldScores = { ...scores };
-                  ROT_GIDS.forEach((gid, i) => {
-                    const nextGid = ROT_GIDS[(i + 1) % ROT_GIDS.length];
-                    scores[gid] = oldScores[nextGid] ?? 0;
-                  });
-                  log += `，全場分數左移：第5→4、第4→3、第3→2、第2→1、第1→5`;
-                }
-                break;
-              case 'steal-common':
-                // 擴權爭議：盲抽一張對方未使用的共同卡
-                if (targetId && hands[targetId]) {
-                  const candidates = [];
-                  hands[targetId].forEach((c, idx) => {
-                    if (!c.isExclusive && c.usedOnQ === null) candidates.push({ c, idx });
-                  });
-                  if (candidates.length > 0) {
-                    const pick = candidates[Math.floor(Math.random() * candidates.length)];
-                    const stolen = pick.c;
-                    hands[targetId][pick.idx] = { ...stolen, usedOnQ: -1 };
-                    hands[myRole].push({
-                      ...stolen,
-                      uniqueId: `${myRole}_stole_com_${Date.now()}`,
-                      usedOnQ: null,
-                    });
-                    log += `，盲抽 ${targetYuan} 的【${stolen.name}】納為己用`;
-                  } else {
-                    log += `，${targetYuan} 無可偷的共同卡`;
-                  }
-                }
-                break;
-              default:
-                log += `（效果開發中）`;
+                };
+              });
+
+              if (result?.played) {
+                sound.draw();
+                sound.attack();
+                setPendingCard(null);
+              }
+            } catch (e) {
+              showError("發動技能失敗：" + e.message);
             }
-
-            // 計算搶答倒數剩餘毫秒（用於解除暫停後恢復）
-            const remainingMs = Math.max(500, roomData.buzzerOpenAt - Date.now());
-
-            // 計算被攻擊者的分數變化（供 overlay 顯示）
-            let targetDelta = null;
-            if (targetId) {
-              const before = roomData.scores?.[targetId] ?? 0;
-              const after = scores[targetId] ?? 0;
-              if (before !== after) targetDelta = after - before; // 負數代表扣分
-            }
-
-            sound.attack();
-            roomRef().update({
-              scores, hands, statusEffects,
-              buzzerOpenAt: Date.now() + 999999,
-              cardOverlay: {
-                playerGroup: myRole,
-                yuanName: myYuan,
-                cardName: card.name,
-                cardDesc: card.desc,
-                log,
-                targetGroup: targetId || null,
-                targetYuanName: targetYuan || null,
-                targetDelta,
-                remainingMs,
-                showUntil: Date.now() + 5000,
-              },
-              actionLog: [log, ...roomData.actionLog].slice(0, 5)
-            });
-            setPendingCard(null);
           };
 
-          const nextQ = () => {
-            if (!roomData || roomData.state !== 'playing') return; // 防止重複或錯誤觸發
-            const newStatus = JSON.parse(JSON.stringify(roomData.statusEffects || {}));
-            // 換題清除：禁卡、銓敘權繳費、護盾（一回合性效果）
-            Object.keys(newStatus).forEach(k => {
-              newStatus[k].cardBanned = false;
-              newStatus[k].mustPayExam = false;
-              newStatus[k].shielded = false;
-            });
-
-            // 觸發突發事件：第 4~12 題之間隨機（qIndex 3~10 結束後插入）
-            const shouldTriggerSurprise = !roomData.surpriseTriggered
-              && typeof roomData.surpriseAfter === 'number'
-              && roomData.qIndex === roomData.surpriseAfter;
-            if (shouldTriggerSurprise) {
-              roomRef().update({
-                state: 'surprise',
-                surpriseTriggered: true,
-                surpriseEvent: { ...buildSurpriseEvent(), answers: {}, deadline: Date.now() + SURPRISE_TIME_LIMIT * 1000 },
-                buzzerWinner: null, buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
-                statusEffects: newStatus, cardOverlay: null,
-                actionLog: [`🚨 突發事件！全員作答（答對 +${SURPRISE_POINTS} / 答錯 -${WRONG_PENALTY}）`, ...roomData.actionLog].slice(0, 5),
+          const nextQ = async (expectedQIndex = roomData?.qIndex) => {
+            if (typeof expectedQIndex !== 'number') expectedQIndex = roomData?.qIndex;
+            if (!roomData || roomData.state !== 'playing' || typeof expectedQIndex !== 'number') return;
+            const surpriseEvent = buildSurpriseEvent();
+            try {
+              await runRoomTransaction((data) => {
+                if (data.state !== 'playing') return null;
+                if (data.qIndex !== expectedQIndex) return null;
+                return { updates: buildNextQuestionUpdate(data, Date.now(), surpriseEvent) };
               });
-              return;
+            } catch (e) {
+              showError("切換題目失敗：" + e.message);
             }
-
-            const updates = roomData.qIndex + 1 < (roomData.questions || []).length
-              ? {
-                  qIndex: roomData.qIndex + 1,
-                  buzzerWinner: null, state: 'playing',
-                  buzzerOpenAt: Date.now() + BUZZ_DELAY_NEW_Q * 1000,
-                  answerDeadline: null, wrongAnswerers: [],
-                  statusEffects: newStatus,
-                  cardOverlay: null,  // 清除殘留的技能遮罩
-                }
-              : { state: 'end', cardOverlay: null };
-            roomRef().update(updates);
           };
 
           // 學生在突發事件中作答（每人只可選一次；自己立刻看到答對/答錯動畫）
-          const answerSurprise = (idx) => {
+          const answerSurprise = async (idx) => {
             if (myRole === 'host' || !roomData?.surpriseEvent) return;
             if (roomData.surpriseEvent.answers?.[myRole] !== undefined) return;
-            const ev = roomData.surpriseEvent;
-            const isCorrect = idx === ev.answer;
-            const team = roomData.teams[myRole];
-            markLocalAnswer(idx, isCorrect, 'surprise', team?.yuan?.name, team?.yuan?.text,
-              isCorrect ? SURPRISE_POINTS : -WRONG_PENALTY);
-            roomRef().update({ [`surpriseEvent.answers.${myRole}`]: idx }).catch(() => {});
+            try {
+              const result = await runRoomTransaction((data) => {
+                const ev = data.surpriseEvent;
+                if (data.state !== 'surprise' || !ev) throw new Error('目前不是突發事件作答時間。');
+                if (ev.resolved) throw new Error('突發事件已結算。');
+                if (Date.now() > ev.deadline) throw new Error('作答時間已結束。');
+                if (ev.answers?.[myRole] !== undefined) return null;
+                const isCorrect = idx === ev.answer;
+                const team = data.teams[myRole];
+                return {
+                  accepted: true,
+                  idx,
+                  isCorrect,
+                  yuanName: team?.yuan?.name,
+                  yuanText: team?.yuan?.text,
+                  points: isCorrect ? SURPRISE_POINTS : -WRONG_PENALTY,
+                  updates: { [`surpriseEvent.answers.${myRole}`]: idx }
+                };
+              });
+              if (result?.accepted) {
+                markLocalAnswer(result.idx, result.isCorrect, 'surprise', result.yuanName, result.yuanText, result.points);
+              }
+            } catch (e) {
+              showError("突發事件作答失敗：" + e.message);
+            }
           };
 
           // 結算突發事件：先寫入 resolved + results 讓所有人看到通知，3.5 秒後再進下一題
-          const resolveSurpriseEvent = () => {
+          const resolveSurpriseEvent = async () => {
             if (!roomData?.surpriseEvent || myRole !== 'host') return;
             if (roomData.surpriseEvent.resolved || surpriseResolving.current) return;
             surpriseResolving.current = true;
-            const ev = roomData.surpriseEvent;
-            const newScores = { ...roomData.scores };
-            const results = [];
-            const joinedIds = Object.values(roomData.teams).filter(t => t.joined).map(t => t.id);
-            const correctNames = [], wrongNames = [];
-            joinedIds.forEach(gid => {
-              const idx = ev.answers?.[gid];
-              const team = roomData.teams[gid];
-              if (idx === undefined) {
-                results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'skipped', points:0 });
-              } else if (idx === ev.answer) {
-                newScores[gid] = (newScores[gid] || 0) + SURPRISE_POINTS;
-                results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'correct', points:SURPRISE_POINTS });
-                correctNames.push(team?.yuan?.name);
-              } else {
-                newScores[gid] = Math.max(0, (newScores[gid] || 0) - WRONG_PENALTY);
-                results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'wrong', points:-WRONG_PENALTY });
-                wrongNames.push(team?.yuan?.name);
-              }
-            });
-            roomRef().update({
-              scores: newScores,
-              surpriseEvent: { ...ev, resolved: true, results, resolvedAt: Date.now() },
-              actionLog: [
-                `🎯 突發事件結算：答對 +${SURPRISE_POINTS}${correctNames.length ? ` (${correctNames.join('、')})` : ''}${wrongNames.length ? ` / 答錯 -${WRONG_PENALTY} (${wrongNames.join('、')})` : ''}`,
-                ...roomData.actionLog
-              ].slice(0, 5),
-            }).then(() => {
-              // 鎖在 ref 1 秒避免 polling 重入
+            try {
+              await runRoomTransaction((data) => {
+                const ev = data.surpriseEvent;
+                if (data.state !== 'surprise' || !ev || ev.resolved) return null;
+                const newScores = { ...(data.scores || {}) };
+                const results = [];
+                const correctNames = [], wrongNames = [];
+                joinedGroupIds(data.teams).forEach(gid => {
+                  const idx = ev.answers?.[gid];
+                  const team = data.teams[gid];
+                  if (idx === undefined) {
+                    results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'skipped', points:0 });
+                  } else if (idx === ev.answer) {
+                    newScores[gid] = (newScores[gid] || 0) + SURPRISE_POINTS;
+                    results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'correct', points:SURPRISE_POINTS });
+                    correctNames.push(team?.yuan?.name);
+                  } else {
+                    newScores[gid] = Math.max(0, (newScores[gid] || 0) - WRONG_PENALTY);
+                    results.push({ yuanId:gid, yuan:team?.yuan?.name, yuanText:team?.yuan?.text, resultType:'wrong', points:-WRONG_PENALTY });
+                    wrongNames.push(team?.yuan?.name);
+                  }
+                });
+                const resolvedAt = Date.now();
+                return {
+                  updates: {
+                    scores: newScores,
+                    surpriseEvent: { ...ev, resolved: true, results, resolvedAt },
+                    actionLog: [
+                      `🎯 突發事件結算：答對 +${SURPRISE_POINTS}${correctNames.length ? ` (${correctNames.join('、')})` : ''}${wrongNames.length ? ` / 答錯 -${WRONG_PENALTY} (${wrongNames.join('、')})` : ''}`,
+                      ...(data.actionLog || [])
+                    ].slice(0, 5),
+                  }
+                };
+              });
               setTimeout(() => { surpriseResolving.current = false; }, 1000);
-            }).catch(() => { surpriseResolving.current = false; });
+            } catch (e) {
+              surpriseResolving.current = false;
+              showError("突發事件結算失敗：" + e.message);
+            }
           };
 
           // 結算完 3.5 秒後推進到下一題（host 觸發、用 captured 值避免 stale state）
-          const advancePastSurprise = () => {
+          const advancePastSurprise = async () => {
             if (!roomData || myRole !== 'host') return;
             const ev = roomData.surpriseEvent;
             if (!ev?.resolved) return;
-            const nextIdx = roomData.qIndex + 1;
-            const hasMore = nextIdx < (roomData.questions || []).length;
-            roomRef().update({
-              state: hasMore ? 'playing' : 'end',
-              qIndex: hasMore ? nextIdx : roomData.qIndex,
-              buzzerOpenAt: hasMore ? Date.now() + BUZZ_DELAY_NEW_Q * 1000 : 0,
-              buzzerWinner: null, answerDeadline: null, wrongAnswerers: [],
-              surpriseEvent: null, cardOverlay: null,
-            });
+            const expectedResolvedAt = ev.resolvedAt;
+            try {
+              await runRoomTransaction((data) => {
+                const freshEv = data.surpriseEvent;
+                if (data.state !== 'surprise' || !freshEv?.resolved) return null;
+                if (expectedResolvedAt && freshEv.resolvedAt !== expectedResolvedAt) return null;
+                const nextIdx = data.qIndex + 1;
+                const hasMore = nextIdx < (data.questions || []).length;
+                return {
+                  updates: {
+                    state: hasMore ? 'playing' : 'end',
+                    qIndex: hasMore ? nextIdx : data.qIndex,
+                    buzzerOpenAt: hasMore ? Date.now() + BUZZ_DELAY_NEW_Q * 1000 : 0,
+                    buzzerWinner: null,
+                    answerDeadline: null,
+                    wrongAnswerers: [],
+                    surpriseEvent: null,
+                    cardOverlay: null,
+                  }
+                };
+              });
+            } catch (e) {
+              showError("突發事件切換失敗：" + e.message);
+            }
           };
 
-          const resetGame = () => {
+          const resetGame = async () => {
             if (myRole !== 'host') return;
-            roomRef().update({
-              state: 'lobby',
-              scores: { group1: 100, group2: 100, group3: 100, group4: 100, group5: 100 },
-              hands: buildInitialHands(),
-              lastRoundWinner: null,
-              lastRoundPoints: 0,
-              statusEffects: {
-                group1: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                group2: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                group3: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                group4: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-                group5: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
-              },
-              questions: shuffle(QUESTION_BANK).slice(0, 12),
-              qIndex: 0, buzzerWinner: null,
-              buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
-              cardOverlay: null,
-              surpriseAfter: 3 + Math.floor(Math.random() * 8),  // qIndex 3..10 → 落在 Q4~Q12 之間
-              surpriseTriggered: false,
-              surpriseEvent: null,
-              heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
-              actionLog: ['🔄 房主已重置遊戲，等待重新分配身分...']
-            });
+            const nextHands = buildInitialHands();
+            const nextQuestions = shuffle(QUESTION_BANK).slice(0, 12);
+            const nextSurpriseAfter = 3 + Math.floor(Math.random() * 8);
+            try {
+              await runRoomTransaction(() => ({
+                updates: {
+                  state: 'lobby',
+                  scores: { group1: 100, group2: 100, group3: 100, group4: 100, group5: 100 },
+                  hands: nextHands,
+                  lastRoundWinner: null,
+                  lastRoundPoints: 0,
+                  statusEffects: createStatusEffects(),
+                  questions: nextQuestions,
+                  qIndex: 0, buzzerWinner: null,
+                  buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
+                  cardOverlay: null,
+                  surpriseAfter: nextSurpriseAfter,  // qIndex 3..10 → 落在 Q4~Q12 之間
+                  surpriseTriggered: false,
+                  surpriseEvent: null,
+                  heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
+                  actionLog: ['🔄 房主已重置遊戲，等待重新分配身分...']
+                }
+              }));
+            } catch (e) {
+              showError("重置失敗：" + e.message);
+            }
           };
 
           // ── 搶答區域渲染 ──────────────────────────────────────
@@ -1350,7 +1542,7 @@
             );
           };
 
-          // ── 規則說明 Modal（rules.html 完整移植） ──────────────
+          // ── 規則說明 Modal ──────────────
           if (showRules) {
             return (
               <div className="h-full flex flex-col app-overlay app-text overflow-hidden">
@@ -1466,7 +1658,7 @@
                             <div className="w-px h-3 bg-slate-600 ml-3.5"></div>
                             <div className="flex items-center gap-3">
                               <span className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-xs font-black shrink-0">3</span>
-                              <p className="text-sm app-text-2">搶到者有 <span className="text-blue-300 font-bold">10 秒</span>回答，超時視為答錯</p>
+                              <p className="text-sm app-text-2">搶到者有 <span className="text-blue-300 font-bold">15 秒</span>回答，超時視為答錯</p>
                             </div>
                             <div className="w-px h-3 bg-slate-600 ml-3.5"></div>
                             <div className="flex items-center gap-3">

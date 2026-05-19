@@ -10,6 +10,6 @@
 
 要更新院長換人時：
 1. 把新照片放到專案根目錄並命名為「XX院院長-人名.jpg」
-2. 編輯 `index.html` 中 `SURPRISE_EVENTS` 陣列裡對應的 `img:` 路徑與 `options[0]`（正解）
+2. 編輯 `index.html` 中 `YUAN_LEADERS` 陣列裡對應的 `leader`、`img` 與 `distractors`
 
 照片建議：人物半身或大頭照、長邊 600-1200px、JPG 即可。
