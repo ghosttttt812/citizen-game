@@ -800,7 +800,7 @@
                   group4: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
                   group5: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
                 },
-                questions: shuffle(QUESTION_BANK),
+                questions: shuffle(QUESTION_BANK).slice(0, 12),
                 qIndex: 0, buzzerWinner: null,
                 buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
                 cardOverlay: null,
@@ -1247,7 +1247,7 @@
                 group4: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
                 group5: { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false },
               },
-              questions: shuffle(QUESTION_BANK),
+              questions: shuffle(QUESTION_BANK).slice(0, 12),
               qIndex: 0, buzzerWinner: null,
               buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
               cardOverlay: null,
@@ -2141,13 +2141,5 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
-</body>
-</html>
-ot'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
-cript>
 </body>
 </html>
