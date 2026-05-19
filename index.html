@@ -126,6 +126,30 @@
           50%      { box-shadow: 0 0 0 14px rgba(244, 63, 94, 0); }
         }
         .surprise-banner { animation: surpriseEnter 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275), surprisePulse 1.6s ease-out 0.7s infinite; }
+
+        /* ── 魔王題警報與下注動畫 ─────────────────────────────── */
+        @keyframes bossAlarmFlash {
+          0%, 100% { background-color: rgba(25, 10, 12, 0.96); }
+          50% { background-color: rgba(130, 18, 28, 0.96); }
+        }
+        @keyframes bossScan {
+          0% { transform: translateY(-120%); opacity: 0; }
+          18% { opacity: 0.7; }
+          100% { transform: translateY(120%); opacity: 0; }
+        }
+        @keyframes bossWarningPop {
+          0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+          50% { transform: scale(1.08); filter: drop-shadow(0 0 22px rgba(255,255,255,0.65)); }
+        }
+        .boss-alarm-bg { animation: bossAlarmFlash 0.85s steps(2, end) infinite; }
+        .boss-alarm-scan::before {
+          content: '';
+          position: absolute;
+          inset: -40% 0;
+          background: linear-gradient(180deg, transparent, rgba(255,255,255,0.18), transparent);
+          animation: bossScan 1.2s linear infinite;
+        }
+        .boss-warning-pop { animation: bossWarningPop 0.9s ease-in-out infinite; }
     </style>
 </head>
 <body class="app-text overflow-hidden select-none">
@@ -200,6 +224,16 @@
               play(330, 'triangle', 0.1);
               setTimeout(() => play(440, 'triangle', 0.1), 80);
               setTimeout(() => play(550, 'triangle', 0.25), 160);
+            },
+            // 魔王題警報（高低交錯）
+            bossAlarm: () => {
+              play(740, 'sawtooth', 0.36, 360);
+              setTimeout(() => play(360, 'square', 0.26, 760), 260);
+            },
+            bossReveal: () => {
+              play(196, 'sawtooth', 0.35, 110);
+              setTimeout(() => play(523, 'square', 0.18), 360);
+              setTimeout(() => play(784, 'square', 0.28), 560);
             },
             // 遊戲結束（四音上揚）
             victory: () => {
@@ -321,7 +355,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260519-02';
+        const BUILD = '20260519-03';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -482,6 +516,26 @@
         const ANSWER_TIME_LIMIT = 15;  // 答題時間上限（秒）
         const SURPRISE_TIME_LIMIT = 15; // 突發事件作答時間（秒）
         const SURPRISE_POINTS = 80;     // 突發事件答對得分（雙倍）
+        const BOSS_Q_INDEX = 11;        // 第 12 題固定為魔王題
+        const BOSS_INTRO_SECONDS = 8;   // 魔王題前置警報秒數
+        const BOSS_RESULT_SECONDS = 5;  // 公布答案後停留秒數
+        const BOSS_BET_OPTIONS = [0, 30, 50];
+        const BOSS_QUESTION = {
+          text: '【魔王題】某一間科技公司因為違反了內政部自行訂定的《施行細則》（位階為「命令」）而被罰款，公司打官司告上地方法院。如果承審法官認定這個《細則》違憲，法官第一步該怎麼做？',
+          options: [
+            '裁定停止審判，並寫信向憲法法庭聲請釋憲',
+            '在這個案件中直接拒絕適用該《細則》進行判決',
+            '直接判決宣告該內政部的《細則》全國永久無效',
+            '把案件移交給立法院，要求立法委員重新修法'
+          ],
+          answer: 1,
+          boss: true,
+        };
+
+        const buildQuestionSet = () => [
+          ...shuffle(QUESTION_BANK).slice(0, BOSS_Q_INDEX),
+          BOSS_QUESTION,
+        ];
 
         const createStatusEffects = () => GROUP_IDS.reduce((acc, gid) => {
           acc[gid] = { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false };
@@ -492,6 +546,9 @@
 
         const joinedGroupIds = (teams = {}) =>
           Object.values(teams).filter(t => t.joined).map(t => t.id);
+
+        const bossParticipantIds = (data = {}) =>
+          joinedGroupIds(data.teams).filter(gid => (data.scores?.[gid] || 0) > 0);
 
         const clearRoundStatusEffects = (statusEffects = {}) => {
           const next = clonePlain(statusEffects);
@@ -552,10 +609,34 @@
 
         const buildNextQuestionUpdate = (data, now, surpriseEvent) => {
           const newStatus = clearRoundStatusEffects(data.statusEffects || {});
+          const shouldEnterBossIntro = data.qIndex + 1 === BOSS_Q_INDEX
+            && (data.questions || []).length > BOSS_Q_INDEX;
           const shouldTriggerSurprise = !data.surpriseTriggered
             && typeof data.surpriseAfter === 'number'
             && data.qIndex === data.surpriseAfter
             && !data.surpriseEvent;
+
+          if (shouldEnterBossIntro) {
+            return {
+              state: 'bossIntro',
+              qIndex: BOSS_Q_INDEX,
+              bossIntroEndsAt: now + BOSS_INTRO_SECONDS * 1000,
+              bossEvent: {
+                id: `boss_${now}`,
+                qIndex: BOSS_Q_INDEX,
+                bets: {},
+                resolved: false,
+              },
+              buzzerWinner: null,
+              buzzerOpenAt: 0,
+              answerDeadline: null,
+              wrongAnswerers: [],
+              statusEffects: newStatus,
+              cardOverlay: null,
+              surpriseEvent: null,
+              actionLog: ['🚨 憲政危機警報！第 12 題魔王題即將啟動！', ...(data.actionLog || [])].slice(0, 5),
+            };
+          }
 
           if (shouldTriggerSurprise) {
             return {
@@ -614,15 +695,22 @@
           const [flippedCards, setFlippedCards] = useState({});
           const [feedbackOverlay, setFeedbackOverlay] = useState(null);
           const [surpriseTimeLeft, setSurpriseTimeLeft] = useState(null);
+          const [bossIntroTimeLeft, setBossIntroTimeLeft] = useState(null);
+          const [bossSelectedAnswer, setBossSelectedAnswer] = useState(null);
+          const [bossSelectedWager, setBossSelectedWager] = useState(null);
           // 本機立即視覺：自己剛剛選了哪題答案、正不正確（不必等 Firestore 回來）
           const [localAnswerResult, setLocalAnswerResult] = useState(null);  // {idx, isCorrect, scope:'regular'|'surprise'}
           const feedbackTimer = useRef(null);
           const surpriseResolving = useRef(false);
           const surpriseAdvancing = useRef(false);
+          const bossIntroAdvancing = useRef(false);
+          const bossRevealing = useRef(false);
+          const bossEnding = useRef(false);
           const prevSurpriseResolvedAt = useRef(null);
+          const prevBossRevealedAt = useRef(null);
           const localAnswerTimer = useRef(null);
 
-          // 模組化：統一顯示「答對 / 答錯」通知（正常題 & 突發事件共用，自己 / 他人都會看到）
+          // 模組化：統一顯示「答對 / 答錯」通知（正常題、突發事件、魔王題共用）
           const showAnswerFeedback = (type, yuanName, yuanText, points, duration) => {
             if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
             setFeedbackOverlay({ type, yuan: yuanName, yuanText, points });
@@ -648,6 +736,7 @@
           const prevWrongLen = useRef(0);
           const prevTimeToOpen = useRef(null);
           const prevSyncCountdown = useRef(null);
+          const prevBossIntroTick = useRef(null);
           const prevLastRoundWinner = useRef(null);
           const timeoutFired = useRef(false);
 
@@ -816,7 +905,7 @@
           useEffect(() => {
             if (!roomData || roomData.state === 'lobby' || roomData.state === 'countdown' || roomData.state === 'end') {
               bgm.toLobby();
-            } else if (roomData.state === 'playing' || roomData.state === 'surprise') {
+            } else if (['playing', 'surprise', 'bossIntro', 'bossBetting', 'bossResult'].includes(roomData.state)) {
               bgm.toGame();
             }
           }, [roomData?.state]);
@@ -835,12 +924,12 @@
           // 老師斷線 → 自動結束遊戲（任一在線學生觸發，寫一次即可）
           useEffect(() => {
             if (!roomData || !roomCode || myRole === 'host') return;
-            if (!['playing', 'countdown', 'surprise'].includes(roomData.state)) return;
+            if (!['playing', 'countdown', 'surprise', 'bossIntro', 'bossBetting', 'bossResult'].includes(roomData.state)) return;
             const hb = roomData.heartbeats?.host;
             if (!hb || hb === 0) return; // host 從未連過，不誤判
             if (Date.now() - hb > 60000) {
               runRoomTransaction((data) => {
-                if (!['playing', 'countdown', 'surprise'].includes(data.state)) return null;
+                if (!['playing', 'countdown', 'surprise', 'bossIntro', 'bossBetting', 'bossResult'].includes(data.state)) return null;
                 const freshHb = data.heartbeats?.host;
                 if (!freshHb || Date.now() - freshHb <= 60000) return null;
                 return {
@@ -876,6 +965,65 @@
             }
           }, [roomData?.state]);
 
+          // 魔王題前置警報倒數
+          useEffect(() => {
+            if (roomData?.state !== 'bossIntro' || !roomData?.bossIntroEndsAt) {
+              setBossIntroTimeLeft(null);
+              prevBossIntroTick.current = null;
+              return;
+            }
+            const update = () => {
+              const t = Math.ceil((roomData.bossIntroEndsAt - Date.now()) / 1000);
+              setBossIntroTimeLeft(Math.max(0, t));
+            };
+            update();
+            const iv = setInterval(update, 200);
+            return () => clearInterval(iv);
+          }, [roomData?.bossIntroEndsAt, roomData?.state]);
+
+          useEffect(() => {
+            if (bossIntroTimeLeft === null) return;
+            if (bossIntroTimeLeft !== prevBossIntroTick.current) sound.bossAlarm();
+            prevBossIntroTick.current = bossIntroTimeLeft;
+          }, [bossIntroTimeLeft]);
+
+          useEffect(() => {
+            if (roomData?.state !== 'bossIntro') bossIntroAdvancing.current = false;
+            if (roomData?.state !== 'bossBetting') bossRevealing.current = false;
+            if (roomData?.state !== 'bossResult') bossEnding.current = false;
+          }, [roomData?.state]);
+
+          useEffect(() => {
+            setBossSelectedAnswer(null);
+            setBossSelectedWager(null);
+          }, [roomData?.bossEvent?.id, roomData?.state]);
+
+          // 魔王題警報結束後，由老師端推進到下注畫面
+          useEffect(() => {
+            if (roomData?.state !== 'bossIntro' || !roomData?.bossIntroEndsAt || myRole !== 'host') return;
+            const check = () => {
+              if (Date.now() < roomData.bossIntroEndsAt || bossIntroAdvancing.current) return;
+              bossIntroAdvancing.current = true;
+              runRoomTransaction((data) => {
+                if (data.state !== 'bossIntro') return null;
+                if (data.bossIntroEndsAt !== roomData.bossIntroEndsAt) return null;
+                return {
+                  started: true,
+                  updates: {
+                    state: 'bossBetting',
+                    bossIntroEndsAt: null,
+                    actionLog: ['👑 魔王題開放下注：選答案，再押 0 / 30 / 50 分！', ...(data.actionLog || [])].slice(0, 5),
+                  }
+                };
+              }).then((result) => {
+                if (!result?.started) bossIntroAdvancing.current = false;
+              }).catch(() => { bossIntroAdvancing.current = false; });
+            };
+            check();
+            const iv = setInterval(check, 250);
+            return () => clearInterval(iv);
+          }, [roomData?.state, roomData?.bossIntroEndsAt, myRole]);
+
           // 突發事件結算（host 監看：全員答完或時間到，結算後 3.5 秒進下一題）
           useEffect(() => {
             if (roomData?.state !== 'surprise' || !roomData?.surpriseEvent || myRole !== 'host') return;
@@ -897,6 +1045,49 @@
             const iv = setInterval(check, 500);
             return () => clearInterval(iv);
           }, [roomData?.state, roomData?.surpriseEvent, myRole]);
+
+          // 魔王題公布後，停留幾秒再進最終結算
+          useEffect(() => {
+            const ev = roomData?.bossEvent;
+            if (roomData?.state !== 'bossResult' || !ev?.resolved || !ev.revealedAt || myRole !== 'host') return;
+            const delay = Math.max(0, ev.revealedAt + BOSS_RESULT_SECONDS * 1000 - Date.now());
+            const timer = setTimeout(() => {
+              if (bossEnding.current) return;
+              bossEnding.current = true;
+              runRoomTransaction((data) => {
+                if (data.state !== 'bossResult') return null;
+                if (data.bossEvent?.revealedAt !== ev.revealedAt) return null;
+                return {
+                  ended: true,
+                  updates: {
+                    state: 'end',
+                    cardOverlay: null,
+                    actionLog: ['🏁 魔王題結束，進入最終結算！', ...(data.actionLog || [])].slice(0, 5),
+                  }
+                };
+              }).then((result) => {
+                if (!result?.ended) bossEnding.current = false;
+              }).catch(() => { bossEnding.current = false; });
+            }, delay);
+            return () => clearTimeout(timer);
+          }, [roomData?.state, roomData?.bossEvent?.resolved, roomData?.bossEvent?.revealedAt, myRole]);
+
+          // 魔王題公布後，各學生看到自己的下注結果動畫
+          useEffect(() => {
+            const ev = roomData?.bossEvent;
+            if (roomData?.state !== 'bossResult' || !ev?.resolved || !ev.results || myRole === 'host') return;
+            if (ev.revealedAt === prevBossRevealedAt.current) return;
+            prevBossRevealedAt.current = ev.revealedAt;
+            const myResult = ev.results.find(r => r.yuanId === myRole);
+            if (!myResult || myResult.resultType === 'skipped') return;
+            if (myResult.resultType === 'correct') {
+              sound.correct();
+              showAnswerFeedback('correct', myResult.yuan, myResult.yuanText, myResult.points, 2200);
+            } else {
+              sound.wrong();
+              showAnswerFeedback('wrong', myResult.yuan, myResult.yuanText, myResult.points, 2200);
+            }
+          }, [roomData?.state, roomData?.bossEvent?.resolved, roomData?.bossEvent?.revealedAt, myRole]);
 
           // 技能遮罩自動清除（由發動者的客戶端負責）
           useEffect(() => {
@@ -992,14 +1183,16 @@
                 lastRoundWinner: null,
                 lastRoundPoints: 0,
                 statusEffects: createStatusEffects(),
-                questions: shuffle(QUESTION_BANK).slice(0, 12),
+                questions: buildQuestionSet(),
                 qIndex: 0, buzzerWinner: null,
                 buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
                 cardOverlay: null,
-                // 突發事件：在 qIndex 3~7 結束後隨機觸發一次
-                surpriseAfter: 3 + Math.floor(Math.random() * 8),  // qIndex 3..10 → 落在 Q4~Q12 之間
+                // 突發事件：在魔王題前隨機觸發一次
+                surpriseAfter: 3 + Math.floor(Math.random() * 7),  // qIndex 3..9 → 落在 Q4~Q10 之間
                 surpriseTriggered: false,
                 surpriseEvent: null,
+                bossIntroEndsAt: null,
+                bossEvent: null,
                 heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
                 actionLog: ['🎯 遊戲房間已建立，等待各組加入...']
               });
@@ -1490,11 +1683,107 @@
             }
           };
 
+          const submitBossBet = async () => {
+            if (!roomData || myRole === 'host' || roomData.state !== 'bossBetting') return;
+            if (bossSelectedAnswer === null || bossSelectedWager === null) {
+              showError('請先選答案，並選擇下注分數。');
+              return;
+            }
+            try {
+              const result = await runRoomTransaction((data) => {
+                if (data.state !== 'bossBetting') throw new Error('目前不是魔王題下注時間。');
+                const ev = data.bossEvent;
+                if (!ev || ev.resolved) throw new Error('魔王題已經結算。');
+                if (!data.teams?.[myRole]?.joined) throw new Error('你尚未加入組別。');
+                if ((data.scores?.[myRole] || 0) <= 0) throw new Error('已淘汰，無法下注。');
+                if (ev.bets?.[myRole]) return null;
+                const q = data.questions?.[ev.qIndex ?? data.qIndex];
+                if (!q) throw new Error('找不到魔王題。');
+                if (!Number.isInteger(bossSelectedAnswer) || bossSelectedAnswer < 0 || bossSelectedAnswer >= q.options.length) {
+                  throw new Error('答案選項不正確。');
+                }
+                if (!BOSS_BET_OPTIONS.includes(bossSelectedWager)) throw new Error('下注分數不正確。');
+                if (bossSelectedWager > (data.scores?.[myRole] || 0)) throw new Error('分數不足，無法下注。');
+                return {
+                  accepted: true,
+                  wager: bossSelectedWager,
+                  updates: {
+                    [`bossEvent.bets.${myRole}`]: {
+                      answer: bossSelectedAnswer,
+                      wager: bossSelectedWager,
+                      submittedAt: Date.now(),
+                    },
+                    actionLog: [`🔒 ${data.teams[myRole]?.yuan?.name} 已鎖定魔王題下注`, ...(data.actionLog || [])].slice(0, 5),
+                  }
+                };
+              });
+              if (result?.accepted) sound.draw();
+            } catch (e) {
+              showError('魔王題下注失敗：' + e.message);
+            }
+          };
+
+          const revealBossAnswer = async () => {
+            if (!roomData || myRole !== 'host' || roomData.state !== 'bossBetting') return;
+            if (bossRevealing.current) return;
+            bossRevealing.current = true;
+            try {
+              const result = await runRoomTransaction((data) => {
+                if (data.state !== 'bossBetting') return null;
+                const ev = data.bossEvent;
+                if (!ev || ev.resolved) return null;
+                const q = data.questions?.[ev.qIndex ?? data.qIndex];
+                if (!q) throw new Error('找不到魔王題。');
+                const participants = bossParticipantIds(data);
+                const bets = ev.bets || {};
+                const allDone = participants.length === 0 || participants.every(gid => !!bets[gid]);
+                if (!allDone) throw new Error('還有組別尚未下注，請等大家鎖定。');
+
+                const newScores = { ...(data.scores || {}) };
+                const results = participants.map((gid) => {
+                  const team = data.teams[gid];
+                  const bet = bets[gid];
+                  if (!bet) {
+                    return { yuanId: gid, yuan: team?.yuan?.name, yuanText: team?.yuan?.text, resultType: 'skipped', answer: null, wager: 0, points: 0 };
+                  }
+                  const isCorrect = bet.answer === q.answer;
+                  const wager = Number(bet.wager) || 0;
+                  const points = wager === 0 ? 0 : (isCorrect ? wager * 2 : -wager);
+                  newScores[gid] = Math.max(0, (newScores[gid] || 0) + points);
+                  return {
+                    yuanId: gid,
+                    yuan: team?.yuan?.name,
+                    yuanText: team?.yuan?.text,
+                    resultType: isCorrect ? 'correct' : 'wrong',
+                    answer: bet.answer,
+                    wager,
+                    points,
+                  };
+                });
+                const revealedAt = Date.now();
+                return {
+                  revealed: true,
+                  updates: {
+                    state: 'bossResult',
+                    scores: newScores,
+                    bossEvent: { ...ev, resolved: true, results, revealedAt, correctAnswer: q.answer },
+                    actionLog: ['👑 魔王題答案公布！分數已結算。', ...(data.actionLog || [])].slice(0, 5),
+                  }
+                };
+              });
+              if (result?.revealed) sound.bossReveal();
+              else bossRevealing.current = false;
+            } catch (e) {
+              bossRevealing.current = false;
+              showError('公布魔王題失敗：' + e.message);
+            }
+          };
+
           const resetGame = async () => {
             if (myRole !== 'host') return;
             const nextHands = buildInitialHands();
-            const nextQuestions = shuffle(QUESTION_BANK).slice(0, 12);
-            const nextSurpriseAfter = 3 + Math.floor(Math.random() * 8);
+            const nextQuestions = buildQuestionSet();
+            const nextSurpriseAfter = 3 + Math.floor(Math.random() * 7);
             try {
               await runRoomTransaction(() => ({
                 updates: {
@@ -1508,9 +1797,11 @@
                   qIndex: 0, buzzerWinner: null,
                   buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
                   cardOverlay: null,
-                  surpriseAfter: nextSurpriseAfter,  // qIndex 3..10 → 落在 Q4~Q12 之間
+                  surpriseAfter: nextSurpriseAfter,  // qIndex 3..9 → 落在 Q4~Q10 之間
                   surpriseTriggered: false,
                   surpriseEvent: null,
+                  bossIntroEndsAt: null,
+                  bossEvent: null,
                   heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
                   actionLog: ['🔄 房主已重置遊戲，等待重新分配身分...']
                 }
@@ -1709,6 +2000,9 @@
                           </div>
                           <div className="mt-3 app-card-2 rounded-xl p-3 text-center">
                             <p className="app-text-3 text-xs">分數歸零 → <span className="text-rose-400 font-bold">淘汰</span>，無法再搶答</p>
+                          </div>
+                          <div className="mt-3 bg-rose-100 rounded-xl p-3 text-center">
+                            <p className="text-rose-700 text-xs font-bold">第 12 題魔王題：先選答案，再押 0 / 30 / 50 分；答對 +下注 2 倍，答錯 -下注分。</p>
                           </div>
                         </div>
 
@@ -1937,6 +2231,212 @@
               )}
             </div>
           );
+
+          if (roomData.state === 'bossIntro') {
+            const count = bossIntroTimeLeft ?? BOSS_INTRO_SECONDS;
+            return (
+              <div className="relative h-full overflow-hidden boss-alarm-bg boss-alarm-scan text-white flex flex-col items-center justify-center p-6 text-center">
+                <ErrorModal />
+                <div className="absolute inset-0 opacity-25 pointer-events-none"
+                  style={{ background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.25) 0 2px, transparent 2px 12px)' }} />
+                <div className="relative z-10 w-full max-w-lg">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-rose-700 font-black tracking-widest mb-6">
+                    WARNING
+                  </div>
+                  <h1 className="text-4xl sm:text-5xl font-black leading-tight boss-warning-pop">憲政危機警報</h1>
+                  <p className="mt-3 text-sm sm:text-base font-bold text-rose-100">第 12 題魔王題即將啟動</p>
+                  <div className="my-8 mx-auto w-44 h-44 rounded-full border-8 border-white flex items-center justify-center shadow-2xl"
+                    style={{ boxShadow:'0 0 42px rgba(255,255,255,0.35), inset 0 0 32px rgba(255,255,255,0.25)' }}>
+                    <span className="text-7xl font-black">{count}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs font-black tracking-wider">
+                    <span className="bg-white/15 py-3 rounded-xl border border-white/30">選答案</span>
+                    <span className="bg-white/15 py-3 rounded-xl border border-white/30">押分數</span>
+                    <span className="bg-white/15 py-3 rounded-xl border border-white/30">等公布</span>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if ((roomData.state === 'bossBetting' || roomData.state === 'bossResult') && roomData.bossEvent) {
+            const ev = roomData.bossEvent;
+            const q = roomData.questions?.[ev.qIndex ?? roomData.qIndex] || BOSS_QUESTION;
+            const bets = ev.bets || {};
+            const activeTeams = Object.values(roomData.teams).filter(t => t.joined && (roomData.scores?.[t.id] || 0) > 0);
+            const submittedCount = activeTeams.filter(t => !!bets[t.id]).length;
+            const allBossBetsDone = activeTeams.length === 0 || activeTeams.every(t => !!bets[t.id]);
+            const isResolved = roomData.state === 'bossResult' && ev.resolved;
+            const myBossBet = myRole !== 'host' ? bets[myRole] : null;
+            const myScore = myRole !== 'host' ? (roomData.scores?.[myRole] || 0) : 0;
+            const resultMap = (ev.results || []).reduce((acc, r) => ({ ...acc, [r.yuanId]: r }), {});
+            const answerLetters = ['A', 'B', 'C', 'D'];
+
+            return (
+              <div className="h-full flex flex-col overflow-hidden text-white"
+                style={{ background:'linear-gradient(180deg, rgba(45,18,20,0.98), rgba(20,20,24,0.98))' }}>
+                <ErrorModal />
+                {feedbackOverlay && (
+                  <div className={`fixed inset-0 z-[95] pointer-events-none flex items-center justify-center ${feedbackOverlay.type === 'correct' ? 'fb-bg-correct' : 'fb-bg-wrong'}`}>
+                    <div className={feedbackOverlay.type === 'correct' ? 'fb-pop-correct' : 'fb-pop-wrong'}>
+                      <div className="text-center">
+                        <div className="text-9xl mb-2">{feedbackOverlay.type === 'correct' ? '🎉' : '❌'}</div>
+                        <p className={`text-3xl font-black ${feedbackOverlay.yuanText || ''}`}>{feedbackOverlay.yuan}</p>
+                        <p className={`text-5xl font-black mt-2 ${feedbackOverlay.type === 'correct' ? 'text-emerald-200' : 'text-rose-200'}`}>{feedbackOverlay.points > 0 ? '+' : ''}{feedbackOverlay.points} 分</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <header className="shrink-0 px-4 py-4 border-b border-white/15">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black text-rose-200 tracking-widest">FINAL BOSS</p>
+                      <h1 className="text-2xl font-black">{isResolved ? '魔王題答案公布' : '第 12 題魔王題下注'}</h1>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-rose-100">已鎖定</p>
+                      <p className="text-2xl font-black">{submittedCount}/{activeTeams.length}</p>
+                    </div>
+                  </div>
+                </header>
+
+                <main className="flex-1 overflow-auto p-4 space-y-4" style={{ WebkitOverflowScrolling:'touch' }}>
+                  <section className="rounded-2xl bg-white text-black p-5 shadow-2xl border-4 border-rose-500">
+                    <p className="text-xs font-black text-rose-700 mb-2">憲政危機情境題</p>
+                    <h2 className="text-xl sm:text-2xl font-black leading-relaxed app-text">{q.text}</h2>
+                    <div className="mt-4 grid grid-cols-1 gap-2">
+                      {q.options.map((o, i) => {
+                        const selected = bossSelectedAnswer === i;
+                        const correct = isResolved && i === (ev.correctAnswer ?? q.answer);
+                        const mySubmitted = myBossBet?.answer === i;
+                        return (
+                          <button key={i}
+                            onClick={() => !isResolved && !myBossBet && myRole !== 'host' && setBossSelectedAnswer(i)}
+                            disabled={isResolved || !!myBossBet || myRole === 'host'}
+                            className={`p-3 rounded-xl border-2 text-left font-bold transition
+                              ${correct ? 'bg-emerald-100 border-emerald-500 text-emerald-800'
+                              : mySubmitted ? 'bg-amber-100 border-amber-500 text-amber-900'
+                              : selected ? 'bg-rose-100 border-rose-500 text-rose-900'
+                              : 'bg-white border-stone-200 text-stone-800'}`}>
+                            <span className="inline-block w-7 h-7 rounded-full text-center leading-7 mr-3 text-sm font-black bg-stone-200 text-stone-700">{answerLetters[i]}</span>
+                            {o}
+                            {correct && <span className="ml-2">正解</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  {!isResolved && myRole === 'host' && (
+                    <section className="rounded-2xl bg-white/10 border border-white/20 p-4">
+                      <div className="grid grid-cols-1 gap-2 mb-4">
+                        {activeTeams.map(t => (
+                          <div key={t.id} className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3">
+                            <span className={`font-black ${t.yuan?.text || ''}`}>{t.yuan?.name}</span>
+                            <span className={`text-sm font-black ${bets[t.id] ? 'text-emerald-200' : 'text-rose-200'}`}>
+                              {bets[t.id] ? '已鎖定' : '等待下注'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={revealBossAnswer} disabled={!allBossBetsDone || bossRevealing.current}
+                        className={`w-full py-4 rounded-xl font-black text-lg transition active:scale-95
+                          ${allBossBetsDone ? 'bg-rose-500 text-white shadow-lg' : 'bg-white/20 text-white/50'}`}>
+                        {allBossBetsDone ? '公布答案並結算分數' : '等待所有組別下注'}
+                      </button>
+                    </section>
+                  )}
+
+                  {!isResolved && myRole !== 'host' && (
+                    <section className="rounded-2xl bg-white/10 border border-white/20 p-4">
+                      {myScore <= 0 ? (
+                        <div className="text-center py-8">
+                          <p className="text-3xl font-black text-white/70">已淘汰</p>
+                          <p className="text-sm text-white/50 mt-2">觀戰等待最終結算</p>
+                        </div>
+                      ) : myBossBet ? (
+                        <div className="text-center py-8">
+                          <p className="text-sm text-rose-100 font-bold">你的下注已鎖定</p>
+                          <p className="text-4xl font-black mt-2">押 {myBossBet.wager} 分</p>
+                          <p className="text-sm text-white/70 mt-2">選擇 {answerLetters[myBossBet.answer]}，等待老師公布答案</p>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-xs font-black text-rose-100 mb-2">選擇下注分數</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {BOSS_BET_OPTIONS.map(w => {
+                              const disabled = w > myScore;
+                              const selected = bossSelectedWager === w;
+                              return (
+                                <button key={w} onClick={() => !disabled && setBossSelectedWager(w)} disabled={disabled}
+                                  className={`py-4 rounded-xl border-2 font-black text-xl transition active:scale-95
+                                    ${selected ? 'bg-rose-500 border-rose-300 text-white'
+                                    : disabled ? 'bg-white/5 border-white/10 text-white/30'
+                                    : 'bg-white/10 border-white/30 text-white'}`}>
+                                  {w}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="text-xs text-white/60 mt-2">目前分數：{myScore} 分。答對獲得下注的 2 倍，答錯扣下注分。</p>
+                          <button onClick={submitBossBet} disabled={bossSelectedAnswer === null || bossSelectedWager === null}
+                            className={`mt-4 w-full py-4 rounded-xl font-black text-lg transition active:scale-95
+                              ${bossSelectedAnswer !== null && bossSelectedWager !== null ? 'bg-white text-rose-700' : 'bg-white/20 text-white/45'}`}>
+                            鎖定答案與下注
+                          </button>
+                        </>
+                      )}
+                    </section>
+                  )}
+
+                  {isResolved && (
+                    <section className="rounded-2xl bg-white text-black p-5 shadow-2xl">
+                      <p className="text-center text-sm font-bold text-stone-500">正解</p>
+                      <p className="text-center text-xl font-black text-emerald-700 mt-1">
+                        {answerLetters[ev.correctAnswer ?? q.answer]}：{q.options[ev.correctAnswer ?? q.answer]}
+                      </p>
+                      <div className="mt-5 grid grid-cols-1 gap-2">
+                        {(ev.results || []).map(r => (
+                          <div key={r.yuanId} className={`flex items-center justify-between gap-3 rounded-xl border-2 px-4 py-3
+                            ${r.resultType === 'correct' ? 'bg-emerald-50 border-emerald-300'
+                            : r.resultType === 'wrong' ? 'bg-rose-50 border-rose-300'
+                            : 'bg-stone-50 border-stone-200'}`}>
+                            <div>
+                              <p className={`font-black ${r.yuanText || 'app-text'}`}>{r.yuan}</p>
+                              <p className="text-xs text-stone-500">
+                                {r.answer === null ? '未下注' : `選 ${answerLetters[r.answer]} / 押 ${r.wager} 分`}
+                              </p>
+                            </div>
+                            <p className={`text-2xl font-black ${r.points > 0 ? 'text-emerald-700' : r.points < 0 ? 'text-rose-700' : 'text-stone-500'}`}>
+                              {r.points > 0 ? '+' : ''}{r.points}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-center text-xs text-stone-500 mt-4">{BOSS_RESULT_SECONDS} 秒後進入最終結算</p>
+                    </section>
+                  )}
+
+                  <section className="rounded-2xl bg-white/10 border border-white/20 p-3">
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {Object.values(roomData.teams).map(t => {
+                        const score = roomData.scores?.[t.id] ?? 0;
+                        const r = resultMap[t.id];
+                        return (
+                          <div key={t.id} className="rounded-xl bg-white/10 px-2 py-3 text-center">
+                            <p className={`text-[10px] font-black ${t.yuan?.text || ''}`}>{t.yuan?.name}</p>
+                            <p className="text-lg font-black">{score}</p>
+                            {r && <p className={`text-[10px] font-bold ${r.points >= 0 ? 'text-emerald-200' : 'text-rose-200'}`}>{r.points > 0 ? '+' : ''}{r.points}</p>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                </main>
+              </div>
+            );
+          }
 
           if (roomData.state === 'end') return (
             <div className="h-full flex flex-col items-center justify-center p-6 app-overlay animate-fade-in">
