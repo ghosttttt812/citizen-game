@@ -271,7 +271,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260518-07';
+        const BUILD = '20260519-01';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -388,11 +388,11 @@
 
         // 院長資料集中在這裡：未來換人時，只要更新 leader、img、distractors。
         const YUAN_LEADERS = [
-          { yuanId:'executive',   yuan:'行政院', emoji:'🏛️', leader:'卓榮泰', img:'行政院院長-卓榮泰.jpg',   distractors:['蘇貞昌', '陳建仁', '賴清德'] },
-          { yuanId:'legislative', yuan:'立法院', emoji:'🏢', leader:'韓國瑜', img:'立法院院長-韓國瑜.jpg', distractors:['游錫堃', '王金平', '蘇嘉全'] },
-          { yuanId:'judicial',    yuan:'司法院', emoji:'⚖️', leader:'謝銘洋', img:'司法院院長-謝銘洋.jpg',    distractors:['許宗力', '賴英照', '翁岳生'] },
-          { yuanId:'control',     yuan:'監察院', emoji:'🔍', leader:'李鴻鈞', img:'監察院院長-李鴻鈞.jpg',     distractors:['陳菊', '張博雅', '王建煊'] },
-          { yuanId:'examination', yuan:'考試院', emoji:'📚', leader:'周弘憲', img:'考試院院長-周弘憲_2.jpg', distractors:['黃榮村', '伍錦霖', '關中'] },
+          { yuanId:'executive',   yuan:'行政院', emoji:'🏛️', leader:'卓榮泰', img:'images/leaders/行政院院長-卓榮泰.jpg',   distractors:['蘇貞昌', '陳建仁', '賴清德'] },
+          { yuanId:'legislative', yuan:'立法院', emoji:'🏢', leader:'韓國瑜', img:'images/leaders/立法院院長-韓國瑜.jpg', distractors:['游錫堃', '王金平', '蘇嘉全'] },
+          { yuanId:'judicial',    yuan:'司法院', emoji:'⚖️', leader:'謝銘洋', img:'images/leaders/司法院院長-謝銘洋.jpg',    distractors:['許宗力', '賴英照', '翁岳生'] },
+          { yuanId:'control',     yuan:'監察院', emoji:'🔍', leader:'李鴻鈞', img:'images/leaders/監察院院長-李鴻鈞.jpg',     distractors:['陳菊', '張博雅', '王建煊'] },
+          { yuanId:'examination', yuan:'考試院', emoji:'📚', leader:'周弘憲', img:'images/leaders/考試院院長-周弘憲_2.jpg', distractors:['黃榮村', '伍錦霖', '關中'] },
         ];
 
         // ── 突發事件題庫（隨機從五院挑一題：誰是該院院長）
