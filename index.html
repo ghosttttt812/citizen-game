@@ -355,7 +355,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260519-03';
+        const BUILD = '20260520-01';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -538,7 +538,7 @@
         ];
 
         const createStatusEffects = () => GROUP_IDS.reduce((acc, gid) => {
-          acc[gid] = { cardBanned: false, priorityBuzz: false, shielded: false, doublePoints: false };
+          acc[gid] = { cardBanned: false, priorityBuzz: false, priorityBuzzQIndex: null, shielded: false, doublePoints: false };
           return acc;
         }, {});
 
@@ -589,6 +589,7 @@
                 buzzerWinner: null,
                 wrongAnswerers: [],
                 answerDeadline: null,
+                cardOverlay: null,
                 actionLog: [`❌ ${yuanName} ${reason}！全員作答完畢，跳過本題${payLog}`, ...(data.actionLog || [])].slice(0, 5)
               }
             };
@@ -602,6 +603,7 @@
               answerDeadline: null,
               wrongAnswerers: newWrong,
               buzzerOpenAt: now + BUZZ_DELAY_RETRY * 1000,
+              cardOverlay: null,
               actionLog: [`❌ ${yuanName} ${reason}！換人搶答 (-${WRONG_PENALTY} 分)${payLog}`, ...(data.actionLog || [])].slice(0, 5)
             }
           };
@@ -1099,6 +1101,8 @@
               runRoomTransaction((data) => {
                 const ov = data.cardOverlay;
                 if (!ov || ov.playerGroup !== playerGroup || ov.showUntil !== showUntil) return null;
+                if (data.state !== 'playing' || data.buzzerWinner) return { updates: { cardOverlay: null } };
+                if (ov.qIndex !== undefined && ov.qIndex !== data.qIndex) return { updates: { cardOverlay: null } };
                 return {
                   updates: {
                     cardOverlay: null,
@@ -1262,10 +1266,15 @@
                 if (data.buzzerWinner) return null;
                 if ((data.scores?.[myRole] || 0) <= 0) throw new Error('已淘汰，無法搶答。');
                 if ((data.wrongAnswerers || []).includes(myRole)) throw new Error('本題已作答過。');
-                const hasPriority = data.statusEffects?.[myRole]?.priorityBuzz;
-                if (!hasPriority && now < data.buzzerOpenAt) throw new Error('搶答倒數尚未結束。');
+                const fx = data.statusEffects?.[myRole] || {};
+                const hasPriority = !!fx.priorityBuzz && fx.priorityBuzzQIndex === data.qIndex;
+                const openAt = Number(data.buzzerOpenAt || 0);
+                if (!hasPriority && (!openAt || now < openAt)) throw new Error('搶答倒數尚未結束。');
                 const newStatus = clonePlain(data.statusEffects || {});
-                if (newStatus[myRole]) newStatus[myRole].priorityBuzz = false;
+                if (newStatus[myRole]) {
+                  newStatus[myRole].priorityBuzz = false;
+                  newStatus[myRole].priorityBuzzQIndex = null;
+                }
                 return {
                   updates: {
                     buzzerWinner: myRole,
@@ -1313,6 +1322,7 @@
                       answerDeadline: null,
                       lastRoundWinner: myRole,
                       lastRoundPoints: gained,
+                      cardOverlay: null,
                       actionLog: [`✅ ${team?.yuan?.name} 答對！+${gained} 分${isDouble ? '（重大建設加倍！）' : ''}${payLog}`, ...(data.actionLog || [])].slice(0, 5)
                     }
                   };
@@ -1407,12 +1417,23 @@
                     if (statusEffects[targetId]?.shielded) {
                       statusEffects[targetId].shielded = false;
                       log += `，但 ${targetYuan} 護盾抵銷了傷害！`;
+                    } else if (activeCard.id === 'con') {
+                      let discarded = null;
+                      if (hands[targetId]) {
+                        const ci = hands[targetId].findIndex(c => !c.isExclusive && c.usedOnQ === null);
+                        if (ci !== -1) {
+                          discarded = hands[targetId][ci];
+                          hands[targetId][ci].usedOnQ = -1;
+                        }
+                      }
+                      if (discarded) {
+                        scores[targetId] = Math.max(0, (scores[targetId] || 0) - (activeCard.dmg || 20));
+                        log += `，彈劾 ${targetYuan}，棄置【${discarded.name}】並扣 ${activeCard.dmg || 20} 分`;
+                      } else {
+                        log += `，${targetYuan} 已無可彈劾的共同卡`;
+                      }
                     } else {
                       scores[targetId] = Math.max(0, (scores[targetId] || 0) - (activeCard.dmg || 50));
-                      if (activeCard.id === 'con' && hands[targetId]) {
-                        const ci = hands[targetId].findIndex(c => !c.isExclusive && c.usedOnQ === null);
-                        if (ci !== -1) hands[targetId][ci].usedOnQ = -1;
-                      }
                       log += `，鎖定 ${targetYuan}（-${activeCard.dmg || 50} 分）`;
                     }
                     break;
@@ -1457,6 +1478,7 @@
                   case 'priority-next':
                     if (!statusEffects[myRole]) statusEffects[myRole] = {};
                     statusEffects[myRole].priorityBuzz = true;
+                    statusEffects[myRole].priorityBuzzQIndex = data.qIndex + 1;
                     log += `，下一回合享優先搶答權`;
                     break;
                   case 'auto':
@@ -1532,6 +1554,7 @@
                     scores, hands, statusEffects,
                     buzzerOpenAt: now + 999999,
                     cardOverlay: {
+                      qIndex: data.qIndex,
                       playerGroup: myRole,
                       yuanName: myYuan,
                       cardName: activeCard.name,
@@ -1683,6 +1706,29 @@
             }
           };
 
+          const startBossBettingNow = async () => {
+            if (!roomData || myRole !== 'host' || roomData.state !== 'bossIntro') return;
+            if (bossIntroAdvancing.current) return;
+            bossIntroAdvancing.current = true;
+            try {
+              const result = await runRoomTransaction((data) => {
+                if (data.state !== 'bossIntro') return null;
+                return {
+                  started: true,
+                  updates: {
+                    state: 'bossBetting',
+                    bossIntroEndsAt: null,
+                    actionLog: ['👑 魔王題開放下注：老師直接啟動下注畫面！', ...(data.actionLog || [])].slice(0, 5),
+                  }
+                };
+              });
+              if (!result?.started) bossIntroAdvancing.current = false;
+            } catch (e) {
+              bossIntroAdvancing.current = false;
+              showError('啟動魔王題下注失敗：' + e.message);
+            }
+          };
+
           const submitBossBet = async () => {
             if (!roomData || myRole === 'host' || roomData.state !== 'bossBetting') return;
             if (bossSelectedAnswer === null || bossSelectedWager === null) {
@@ -1736,8 +1782,6 @@
                 if (!q) throw new Error('找不到魔王題。');
                 const participants = bossParticipantIds(data);
                 const bets = ev.bets || {};
-                const allDone = participants.length === 0 || participants.every(gid => !!bets[gid]);
-                if (!allDone) throw new Error('還有組別尚未下注，請等大家鎖定。');
 
                 const newScores = { ...(data.scores || {}) };
                 const results = participants.map((gid) => {
@@ -1830,6 +1874,12 @@
             if (alreadyWrong) return (
               <div className="mt-4 py-6 rounded-3xl font-black text-xl app-card border-2 app-border app-text-3 text-center">
                 已答題，等待其他組搶答
+              </div>
+            );
+
+            if (timeToOpen === null) return (
+              <div className="mt-4 py-6 rounded-3xl font-black text-xl app-card-2 app-text-3 text-center">
+                同步倒數中...
               </div>
             );
 
@@ -2249,11 +2299,14 @@
                     style={{ boxShadow:'0 0 42px rgba(255,255,255,0.35), inset 0 0 32px rgba(255,255,255,0.25)' }}>
                     <span className="text-7xl font-black">{count}</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs font-black tracking-wider">
-                    <span className="bg-white/15 py-3 rounded-xl border border-white/30">選答案</span>
-                    <span className="bg-white/15 py-3 rounded-xl border border-white/30">押分數</span>
-                    <span className="bg-white/15 py-3 rounded-xl border border-white/30">等公布</span>
-                  </div>
+                  {myRole === 'host' ? (
+                    <button onClick={startBossBettingNow}
+                      className="mt-2 w-full max-w-xs bg-white text-rose-700 py-4 rounded-xl font-black text-lg shadow-2xl active:scale-95 transition">
+                      直接進入魔王題
+                    </button>
+                  ) : (
+                    <p className="mt-2 text-sm font-bold text-rose-100">等待老師啟動魔王題</p>
+                  )}
                 </div>
               </div>
             );
@@ -2340,10 +2393,11 @@
                           </div>
                         ))}
                       </div>
-                      <button onClick={revealBossAnswer} disabled={!allBossBetsDone || bossRevealing.current}
+                      <p className="text-xs text-white/60 mb-3 text-center">可直接公布，尚未下注的組別以未下注計算</p>
+                      <button onClick={revealBossAnswer} disabled={bossRevealing.current}
                         className={`w-full py-4 rounded-xl font-black text-lg transition active:scale-95
-                          ${allBossBetsDone ? 'bg-rose-500 text-white shadow-lg' : 'bg-white/20 text-white/50'}`}>
-                        {allBossBetsDone ? '公布答案並結算分數' : '等待所有組別下注'}
+                          ${bossRevealing.current ? 'bg-white/20 text-white/50' : 'bg-rose-500 text-white shadow-lg'}`}>
+                        {allBossBetsDone ? '公布答案並結算分數' : '直接公布答案並結算'}
                       </button>
                     </section>
                   )}
@@ -2791,6 +2845,7 @@
                     const isWrong = (roomData.wrongAnswerers || []).includes(myRole);
                     const borderClass = team.yuan?.border || 'app-border';
                     const fx = roomData.statusEffects?.[myRole] || {};
+                    const hasPriorityNow = !!fx.priorityBuzz && fx.priorityBuzzQIndex === roomData.qIndex;
                     return (
                       <div className={`relative rounded-xl border-2 overflow-hidden flex items-center px-3 py-2 gap-3 h-12
                         ${isBuzz ? 'border-yellow-400 bg-white' : `${borderClass} app-card`}
@@ -2802,7 +2857,7 @@
                         <span className={`relative text-sm font-black shrink-0 ${isBuzz ? team.yuan?.text : 'app-text'}`}>{team.yuan?.name}</span>
                         {fx.shielded && <span className="relative text-[10px] bg-blue-100 text-blue-700 px-1 rounded shrink-0">🛡護</span>}
                         {fx.doublePoints && <span className="relative text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded shrink-0">×2</span>}
-                        {fx.priorityBuzz && <span className="relative text-[10px] bg-emerald-100 text-emerald-700 px-1 rounded shrink-0">優先</span>}
+                        {hasPriorityNow && <span className="relative text-[10px] bg-emerald-100 text-emerald-700 px-1 rounded shrink-0">優先</span>}
                         <div className="relative flex-1 text-right">
                           <span className={`text-2xl font-black ${isBuzz ? 'text-black' : myScore <= 20 ? 'text-rose-500' : 'app-text'}`}>{myScore}</span>
                           <span className="text-xs app-text-3 ml-1">分</span>
