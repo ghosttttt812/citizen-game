@@ -355,7 +355,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260520-01';
+        const BUILD = '20260520-02';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -532,9 +532,21 @@
           boss: true,
         };
 
+        const shuffleQuestionOptions = (q) => {
+          const shuffledOptions = shuffle(q.options.map((option, idx) => ({
+            option,
+            isAnswer: idx === q.answer,
+          })));
+          return {
+            ...q,
+            options: shuffledOptions.map(item => item.option),
+            answer: shuffledOptions.findIndex(item => item.isAnswer),
+          };
+        };
+
         const buildQuestionSet = () => [
-          ...shuffle(QUESTION_BANK).slice(0, BOSS_Q_INDEX),
-          BOSS_QUESTION,
+          ...shuffle(QUESTION_BANK).slice(0, BOSS_Q_INDEX).map(shuffleQuestionOptions),
+          shuffleQuestionOptions(BOSS_QUESTION),
         ];
 
         const createStatusEffects = () => GROUP_IDS.reduce((acc, gid) => {
