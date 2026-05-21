@@ -355,7 +355,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260520-02';
+        const BUILD = '20260520-03';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -531,6 +531,20 @@
           answer: 1,
           boss: true,
         };
+        const FALLBACK_BOSS_QUESTIONS = [
+          BOSS_QUESTION,
+          {
+            text: '【魔王題】某縣政府為了因應新興傳染病，自行發布「某縣防疫管制辦法」。該辦法規定：「確診者未經許可踏出家門一步者，由縣政府直接沒收其名下所有房產，並強制拘禁六個月。」關於這項規定的效力，下列分析何者正確？',
+            options: [
+              '有效，因為維護公共利益可以無條件凌駕於人民的基本權利之上',
+              '無效，因為剝奪人民財產權與人身自由，必須以立法院三讀通過的法律定之，不能僅用辦法規定',
+              '有效，因為縣政府有權制定地方自治法規，只要經縣長簽署公布即可對縣民生效',
+              '無效，因為只有行政院才有權發布辦法，地方政府完全不能制定行政規定'
+            ],
+            answer: 1,
+            boss: true,
+          },
+        ];
 
         const shuffleQuestionOptions = (q) => {
           const shuffledOptions = shuffle(q.options.map((option, idx) => ({
@@ -544,9 +558,41 @@
           };
         };
 
-        const buildQuestionSet = () => [
+        const parseFinalQuestions = (raw = '') => {
+          const normalized = raw.replace(/\r\n/g, '\n').trim();
+          if (!normalized) return [];
+          const blocks = [...normalized.matchAll(/(?:^|\n)\s*\d+\.\s*(?:魔王題[:：])?\s*([\s\S]*?)(?=\n\s*\d+\.\s*(?:魔王題[:：])?|\s*$)/g)];
+          return blocks.map((match) => {
+            const block = match[1].trim();
+            const optionMatches = [...block.matchAll(/^\s*\(([A-D])\)\s*(.+)$/gm)];
+            const answerMatch = block.match(/正確答案\s*[:：]\s*([A-D])/i);
+            const firstOptionIndex = block.search(/^\s*\([A-D]\)\s*/m);
+            if (firstOptionIndex < 0 || optionMatches.length !== 4 || !answerMatch) return null;
+            const text = block.slice(0, firstOptionIndex).trim().replace(/\n+/g, ' ');
+            const optionsByLetter = optionMatches.reduce((acc, item) => {
+              acc[item[1].toUpperCase()] = item[2].trim();
+              return acc;
+            }, {});
+            const letters = ['A', 'B', 'C', 'D'];
+            const answerLetter = answerMatch[1].toUpperCase();
+            if (!letters.every(letter => optionsByLetter[letter])) return null;
+            return {
+              text: text.startsWith('【魔王題】') ? text : `【魔王題】${text}`,
+              options: letters.map(letter => optionsByLetter[letter]),
+              answer: letters.indexOf(answerLetter),
+              boss: true,
+            };
+          }).filter(Boolean);
+        };
+
+        const pickBossQuestion = (bossQuestions = []) => {
+          const pool = Array.isArray(bossQuestions) && bossQuestions.length ? bossQuestions : FALLBACK_BOSS_QUESTIONS;
+          return shuffle(pool)[0];
+        };
+
+        const buildQuestionSet = (bossQuestions = FALLBACK_BOSS_QUESTIONS) => [
           ...shuffle(QUESTION_BANK).slice(0, BOSS_Q_INDEX).map(shuffleQuestionOptions),
-          shuffleQuestionOptions(BOSS_QUESTION),
+          shuffleQuestionOptions(pickBossQuestion(bossQuestions)),
         ];
 
         const createStatusEffects = () => GROUP_IDS.reduce((acc, gid) => {
@@ -712,6 +758,7 @@
           const [bossIntroTimeLeft, setBossIntroTimeLeft] = useState(null);
           const [bossSelectedAnswer, setBossSelectedAnswer] = useState(null);
           const [bossSelectedWager, setBossSelectedWager] = useState(null);
+          const [bossQuestions, setBossQuestions] = useState(FALLBACK_BOSS_QUESTIONS);
           // 本機立即視覺：自己剛剛選了哪題答案、正不正確（不必等 Firestore 回來）
           const [localAnswerResult, setLocalAnswerResult] = useState(null);  // {idx, isCorrect, scope:'regular'|'surprise'}
           const feedbackTimer = useRef(null);
@@ -780,6 +827,19 @@
               setIsConnecting(false);
             });
             return () => unsubscribe();
+          }, []);
+
+          // 讀取外部魔王題題庫；讀不到時使用內建備援題目
+          useEffect(() => {
+            let alive = true;
+            fetch(`finalQuestion.txt?v=${BUILD}`)
+              .then(res => res.ok ? res.text() : '')
+              .then(text => {
+                const parsed = parseFinalQuestions(text);
+                if (alive && parsed.length > 0) setBossQuestions(parsed);
+              })
+              .catch(() => {});
+            return () => { alive = false; };
           }, []);
 
           // 監聽房間資料
@@ -1199,7 +1259,7 @@
                 lastRoundWinner: null,
                 lastRoundPoints: 0,
                 statusEffects: createStatusEffects(),
-                questions: buildQuestionSet(),
+                questions: buildQuestionSet(bossQuestions),
                 qIndex: 0, buzzerWinner: null,
                 buzzerOpenAt: 0, answerDeadline: null, wrongAnswerers: [],
                 cardOverlay: null,
@@ -1838,7 +1898,7 @@
           const resetGame = async () => {
             if (myRole !== 'host') return;
             const nextHands = buildInitialHands();
-            const nextQuestions = buildQuestionSet();
+            const nextQuestions = buildQuestionSet(bossQuestions);
             const nextSurpriseAfter = 3 + Math.floor(Math.random() * 7);
             try {
               await runRoomTransaction(() => ({
