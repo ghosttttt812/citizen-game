@@ -355,7 +355,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260520-03';
+        const BUILD = '20260521-01';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -767,6 +767,7 @@
           const bossIntroAdvancing = useRef(false);
           const bossRevealing = useRef(false);
           const bossEnding = useRef(false);
+          const bossAutoRevealTimer = useRef(null);
           const prevSurpriseResolvedAt = useRef(null);
           const prevBossRevealedAt = useRef(null);
           const localAnswerTimer = useRef(null);
@@ -1065,6 +1066,10 @@
             if (roomData?.state !== 'bossIntro') bossIntroAdvancing.current = false;
             if (roomData?.state !== 'bossBetting') bossRevealing.current = false;
             if (roomData?.state !== 'bossResult') bossEnding.current = false;
+            if (roomData?.state !== 'bossBetting' && bossAutoRevealTimer.current) {
+              clearTimeout(bossAutoRevealTimer.current);
+              bossAutoRevealTimer.current = null;
+            }
           }, [roomData?.state]);
 
           useEffect(() => {
@@ -1145,6 +1150,31 @@
             }, delay);
             return () => clearTimeout(timer);
           }, [roomData?.state, roomData?.bossEvent?.resolved, roomData?.bossEvent?.revealedAt, myRole]);
+
+          // 魔王題全員下注完畢後，保留按鍵並在 3 秒後自動公布答案
+          useEffect(() => {
+            if (bossAutoRevealTimer.current) {
+              clearTimeout(bossAutoRevealTimer.current);
+              bossAutoRevealTimer.current = null;
+            }
+            const ev = roomData?.bossEvent;
+            if (roomData?.state !== 'bossBetting' || myRole !== 'host' || !ev || ev.resolved) return;
+            const participants = bossParticipantIds(roomData);
+            if (participants.length === 0) return;
+            const bets = ev.bets || {};
+            const allDone = participants.every(gid => !!bets[gid]);
+            if (!allDone) return;
+            bossAutoRevealTimer.current = setTimeout(() => {
+              bossAutoRevealTimer.current = null;
+              revealBossAnswer();
+            }, 3000);
+            return () => {
+              if (bossAutoRevealTimer.current) {
+                clearTimeout(bossAutoRevealTimer.current);
+                bossAutoRevealTimer.current = null;
+              }
+            };
+          }, [roomData?.state, roomData?.bossEvent?.id, roomData?.bossEvent?.bets, myRole]);
 
           // 魔王題公布後，各學生看到自己的下注結果動畫
           useEffect(() => {
@@ -2465,7 +2495,9 @@
                           </div>
                         ))}
                       </div>
-                      <p className="text-xs text-white/60 mb-3 text-center">可直接公布，尚未下注的組別以未下注計算</p>
+                      <p className="text-xs text-white/60 mb-3 text-center">
+                        {allBossBetsDone ? '全員已鎖定，3 秒後自動公布；也可直接按下方按鍵' : '可直接公布，尚未下注的組別以未下注計算'}
+                      </p>
                       <button onClick={revealBossAnswer} disabled={bossRevealing.current}
                         className={`w-full py-4 rounded-xl font-black text-lg transition active:scale-95
                           ${bossRevealing.current ? 'bg-white/20 text-white/50' : 'bg-rose-500 text-white shadow-lg'}`}>
