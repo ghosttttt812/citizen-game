@@ -356,7 +356,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260526-03';
+        const BUILD = '20260526-04';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -470,8 +470,33 @@
         const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
         const normalizeRoomCode = (value = '') =>
           String(value).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
-
         const GROUP_IDS = ['group1','group2','group3','group4','group5'];
+        const SESSION_STORAGE_KEY = 'citizenGameSessionV2';
+        const validRole = (role) => role === 'host' || GROUP_IDS.includes(role);
+        const loadSavedSession = () => {
+          try {
+            const saved = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || 'null');
+            const roomCode = normalizeRoomCode(saved?.roomCode || '');
+            const role = saved?.role || '';
+            if (roomCode.length !== 4 || !validRole(role)) return null;
+            return { roomCode, role };
+          } catch (_) {
+            return null;
+          }
+        };
+        const saveSession = (roomCode, role) => {
+          const code = normalizeRoomCode(roomCode);
+          if (code.length !== 4 || !validRole(role)) return;
+          try {
+            localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+              roomCode: code,
+              role,
+            }));
+          } catch (_) {}
+        };
+        const clearSavedSession = () => {
+          try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch (_) {}
+        };
 
         // 院長資料集中在這裡：未來換人時，只要更新 leader、img、distractors。
         const YUAN_LEADERS = [
@@ -788,6 +813,7 @@
           const [isConnecting, setIsConnecting] = useState(true);
           const [roomCode, setRoomCode] = useState('');
           const [roomData, setRoomData] = useState(null);
+          const [presence, setPresence] = useState({});
           const [myRole, setMyRole] = useState(null);
           const [joinInput, setJoinInput] = useState('');
           const [entryBusy, setEntryBusy] = useState(null);
@@ -873,22 +899,37 @@
           // Firebase Auth
           useEffect(() => {
             let alive = true;
-            auth.signInAnonymously().then((cred) => {
-              if (!alive || !cred?.user) return;
-              setUser(cred.user);
-              setIsConnecting(false);
-            }).catch(() => {
-              if (!alive) return;
-              setIsConnecting(false);
-              showError("連線至伺服器失敗，請重新整理網頁。");
-            });
+            let signingIn = false;
+            const signIn = () => {
+              if (signingIn) return;
+              signingIn = true;
+              auth.signInAnonymously().catch(() => {
+                if (!alive) return;
+                setIsConnecting(false);
+                showError("連線至伺服器失敗，請重新整理網頁。");
+              });
+            };
             const unsubscribe = auth.onAuthStateChanged((u) => {
-              if (!alive || !u) return;
+              if (!alive) return;
+              if (!u) {
+                signIn();
+                return;
+              }
               setUser(u);
               setIsConnecting(false);
             });
             return () => { alive = false; unsubscribe(); };
           }, []);
+
+          // 重新整理或誤關頁面後，自動回到原本房間與身分
+          useEffect(() => {
+            if (!user || roomCode || myRole) return;
+            const saved = loadSavedSession();
+            if (!saved) return;
+            setJoinInput(saved.roomCode);
+            setRoomCode(saved.roomCode);
+            setMyRole(saved.role);
+          }, [user, roomCode, myRole]);
 
           // 讀取外部魔王題題庫；讀不到時使用內建備援題目
           useEffect(() => {
@@ -910,6 +951,27 @@
               (doc) => {
                 if (doc.exists) {
                   const data = doc.data();
+                  if (myRole === 'host' && data.hostUid && data.hostUid !== user.uid) {
+                    clearSavedSession();
+                    setRoomCode('');
+                    setRoomData(null);
+                    setPresence({});
+                    setMyRole(null);
+                    showError('這個房間不是由目前裝置建立，請重新建立或加入房間。');
+                    return;
+                  }
+                  if (myRole && myRole !== 'host') {
+                    const team = data.teams?.[myRole];
+                    if (!team?.joined || (team.uid && team.uid !== user.uid)) {
+                      clearSavedSession();
+                      setRoomCode('');
+                      setRoomData(null);
+                      setPresence({});
+                      setMyRole(null);
+                      showError('儲存的組別身分已失效，請重新加入房間。');
+                      return;
+                    }
+                  }
                   setRoomData(data);
                   if (data.state === 'countdown' && data.startTime) {
                     const diff = Math.ceil((data.startTime - Date.now()) / 1000);
@@ -918,14 +980,30 @@
                     setSyncCountdown(null);
                   }
                 } else {
+                  clearSavedSession();
                   showError("房間不存在或已由房主關閉！");
-                  setRoomCode(''); setMyRole(null);
+                  setRoomCode(''); setRoomData(null); setPresence({}); setMyRole(null);
                 }
               },
               () => showError("資料同步中斷，請確認網路連線！")
             );
             return () => unsubscribe();
-          }, [user, roomCode]);
+          }, [user, roomCode, myRole]);
+
+          // 監聽 presence 子集合；心跳不再寫入主遊戲文件，避免五台裝置一直推送整包房間資料
+          useEffect(() => {
+            if (!roomCode) {
+              setPresence({});
+              return;
+            }
+            const unsubscribe = db.collection('rooms_v2').doc(roomCode).collection('presence')
+              .onSnapshot((snap) => {
+                const next = {};
+                snap.forEach(doc => { next[doc.id] = doc.data(); });
+                setPresence(next);
+              }, () => {});
+            return () => unsubscribe();
+          }, [roomCode]);
 
           // 同步倒數計時；任一已進房裝置都可備援啟動，避免只靠老師端造成卡住
           useEffect(() => {
@@ -1076,26 +1154,29 @@
 
           // 心跳：降低同房多裝置同時寫入頻率，減少遊戲中不必要的同步抖動
           useEffect(() => {
-            if (!roomCode || !myRole) return;
-            const write = () => db.collection('rooms_v2').doc(roomCode).update({
-              [`heartbeats.${myRole}`]: Date.now()
+            if (!roomCode || !myRole || !user) return;
+            const write = () => db.collection('rooms_v2').doc(roomCode).collection('presence').doc(myRole).set({
+              role: myRole,
+              uid: user.uid,
+              online: true,
+              lastSeen: Date.now()
             }).catch(() => {});
             write();
             const iv = setInterval(write, HEARTBEAT_INTERVAL_MS);
             return () => clearInterval(iv);
-          }, [roomCode, myRole]);
+          }, [roomCode, myRole, user]);
 
           // 老師斷線 → 自動結束遊戲（任一在線學生觸發，寫一次即可）
           useEffect(() => {
             if (!roomData || !roomCode || myRole === 'host') return;
             if (!['playing', 'countdown', 'surprise', 'bossIntro', 'bossBetting', 'bossResult'].includes(roomData.state)) return;
-            const hb = roomData.heartbeats?.host;
-            if (!hb || hb === 0) return; // host 從未連過，不誤判
-            if (Date.now() - hb > OFFLINE_AFTER_MS) {
+            const checkHost = () => {
+              const hb = presence.host?.lastSeen || roomData.heartbeats?.host;
+              if (!hb || hb === 0) return; // host 從未連過，不誤判
+              const offline = presence.host?.online === false || Date.now() - hb > OFFLINE_AFTER_MS;
+              if (!offline) return;
               runRoomTransaction((data) => {
                 if (!['playing', 'countdown', 'surprise', 'bossIntro', 'bossBetting', 'bossResult'].includes(data.state)) return null;
-                const freshHb = data.heartbeats?.host;
-                if (!freshHb || Date.now() - freshHb <= OFFLINE_AFTER_MS) return null;
                 return {
                   updates: {
                     state: 'end',
@@ -1104,8 +1185,11 @@
                   }
                 };
               }).catch(() => {});
-            }
-          }, [roomData]);
+            };
+            checkHost();
+            const iv = setInterval(checkHost, 5000);
+            return () => clearInterval(iv);
+          }, [roomData?.state, roomCode, myRole, presence.host?.lastSeen, presence.host?.online]);
 
           // 突發事件本地倒數
           useEffect(() => {
@@ -1392,11 +1476,17 @@
                 surpriseEvent: null,
                 bossIntroEndsAt: null,
                 bossEvent: null,
-                heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
                 actionLog: ['🎯 遊戲房間已建立，等待各組加入...']
               });
               setRoomCode(code);
               setMyRole('host');
+              saveSession(code, 'host');
+              db.collection('rooms_v2').doc(code).collection('presence').doc('host').set({
+                role: 'host',
+                uid: user.uid,
+                online: true,
+                lastSeen: Date.now()
+              }).catch(() => {});
             } catch (e) {
               showError("建立房間失敗：" + e.message);
             } finally {
@@ -1436,11 +1526,17 @@
                   updates: {
                     [`teams.${gid}.joined`]: true,
                     [`teams.${gid}.uid`]: user.uid,
-                    [`heartbeats.${gid}`]: Date.now(),
                   }
                 };
               });
               setMyRole(gid);
+              saveSession(roomCode, gid);
+              db.collection('rooms_v2').doc(roomCode).collection('presence').doc(gid).set({
+                role: gid,
+                uid: user.uid,
+                online: true,
+                lastSeen: Date.now()
+              }).catch(() => {});
               setPendingGroup(null);
               setCardRevealed(false);
             } catch (e) {
@@ -1450,7 +1546,24 @@
             }
           };
 
-          const leaveRoom = () => { setRoomCode(''); setRoomData(null); setMyRole(null); setEntryBusy(null); };
+          const leaveRoom = () => {
+            const oldRoomCode = roomCode;
+            const oldRole = myRole;
+            if (oldRoomCode && oldRole && user) {
+              db.collection('rooms_v2').doc(oldRoomCode).collection('presence').doc(oldRole).set({
+                role: oldRole,
+                uid: user.uid,
+                online: false,
+                lastSeen: Date.now()
+              }, { merge: true }).catch(() => {});
+            }
+            clearSavedSession();
+            setRoomCode('');
+            setRoomData(null);
+            setPresence({});
+            setMyRole(null);
+            setEntryBusy(null);
+          };
 
           const startSync = async () => {
             if (entryBusy) return;
@@ -2070,7 +2183,6 @@
                   surpriseEvent: null,
                   bossIntroEndsAt: null,
                   bossEvent: null,
-                  heartbeats: { host: Date.now(), group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 },
                   actionLog: ['🔄 房主已重置遊戲，等待重新分配身分...']
                 }
               }));
@@ -2443,8 +2555,9 @@
                   <div>
                     <div className="flex flex-wrap justify-center gap-2 mb-6">
                       {Object.values(roomData.teams).map(t => {
-                        const hb = roomData.heartbeats?.[t.id] || 0;
-                        const offline = t.joined && hb > 0 && (Date.now() - hb) > OFFLINE_AFTER_MS;
+                        const p = presence[t.id] || {};
+                        const hb = p.lastSeen || roomData.heartbeats?.[t.id] || 0;
+                        const offline = t.joined && (p.online === false || (hb > 0 && Date.now() - hb > OFFLINE_AFTER_MS));
                         return (
                           <span key={t.id} className={`px-3 py-1.5 rounded-full font-bold text-xs border-2
                             ${offline ? 'bg-rose-100 border-rose-400 text-rose-700'
