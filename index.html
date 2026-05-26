@@ -172,6 +172,7 @@
         const auth = firebase.auth();
         // 使用 v2 collection 避免與 index.html 的資料衝突
         const db = firebase.firestore();
+        db.settings({ experimentalAutoDetectLongPolling: true });
 
         // ── 音效系統（Web Audio API，不需外部檔案）──────────────
         const sound = (() => {
@@ -355,7 +356,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260526-02';
+        const BUILD = '20260526-03';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -467,6 +468,8 @@
         // QUESTION_BANK 來自外部 questions.js
 
         const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
+        const normalizeRoomCode = (value = '') =>
+          String(value).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
 
         const GROUP_IDS = ['group1','group2','group3','group4','group5'];
 
@@ -514,6 +517,10 @@
         const BUZZ_DELAY_NEW_Q = 5;    // 新題目搶答延遲秒數（技能發動窗口）
         const BUZZ_DELAY_RETRY = 1;    // 答錯後換人搶答延遲
         const ANSWER_TIME_LIMIT = 15;  // 答題時間上限（秒）
+        const ANSWER_TIMEOUT_GRACE_MS = 1500; // 答題端卡住時，老師端備援結算
+        const CARD_OVERLAY_HOST_GRACE_MS = 1500; // 出牌端卡住時，老師端備援清遮罩
+        const HEARTBEAT_INTERVAL_MS = 45000;
+        const OFFLINE_AFTER_MS = 90000;
         const SURPRISE_TIME_LIMIT = 15; // 突發事件作答時間（秒）
         const SURPRISE_POINTS = 80;     // 突發事件答對得分（雙倍）
         const BOSS_Q_INDEX = 11;        // 第 12 題固定為魔王題
@@ -783,6 +790,7 @@
           const [roomData, setRoomData] = useState(null);
           const [myRole, setMyRole] = useState(null);
           const [joinInput, setJoinInput] = useState('');
+          const [entryBusy, setEntryBusy] = useState(null);
           const [errorMsg, setErrorMsg] = useState('');
           const [syncCountdown, setSyncCountdown] = useState(null);
           const [timeToOpen, setTimeToOpen] = useState(null);       // 搶答開放倒數
@@ -842,6 +850,7 @@
           const prevBossIntroTick = useRef(null);
           const prevLastRoundWinner = useRef(null);
           const timeoutFired = useRef(false);
+          const hostTimeoutSettled = useRef(null);
 
           const showError = (msg) => setErrorMsg(msg);
 
@@ -863,12 +872,22 @@
 
           // Firebase Auth
           useEffect(() => {
-            auth.signInAnonymously().catch(() => showError("連線至伺服器失敗，請重新整理網頁。"));
+            let alive = true;
+            auth.signInAnonymously().then((cred) => {
+              if (!alive || !cred?.user) return;
+              setUser(cred.user);
+              setIsConnecting(false);
+            }).catch(() => {
+              if (!alive) return;
+              setIsConnecting(false);
+              showError("連線至伺服器失敗，請重新整理網頁。");
+            });
             const unsubscribe = auth.onAuthStateChanged((u) => {
+              if (!alive || !u) return;
               setUser(u);
               setIsConnecting(false);
             });
-            return () => unsubscribe();
+            return () => { alive = false; unsubscribe(); };
           }, []);
 
           // 讀取外部魔王題題庫；讀不到時使用內建備援題目
@@ -908,14 +927,15 @@
             return () => unsubscribe();
           }, [user, roomCode]);
 
-          // 同步倒數計時
+          // 同步倒數計時；任一已進房裝置都可備援啟動，避免只靠老師端造成卡住
           useEffect(() => {
             if (syncCountdown !== null && syncCountdown > 0) {
               const timer = setTimeout(() => setSyncCountdown(syncCountdown - 1), 1000);
               return () => clearTimeout(timer);
-            } else if (syncCountdown === 0 && myRole === 'host') {
+            } else if (syncCountdown === 0 && myRole) {
               runRoomTransaction((data) => {
                 if (data.state !== 'countdown') return null;
+                if (data.startTime && Date.now() < data.startTime) return null;
                 return {
                   updates: {
                     state: 'playing',
@@ -925,7 +945,7 @@
                 };
               }).catch(() => {});
             }
-          }, [syncCountdown]);
+          }, [syncCountdown, myRole]);
 
           // 搶答開放倒數（本地計算）
           useEffect(() => {
@@ -965,6 +985,34 @@
             timeoutFired.current = true;
             handleTimeout();
           }, [answerTimeLeft]);
+
+          // 老師端備援：答題那台裝置若卡住，超時後仍自動結算並釋放流程
+          useEffect(() => {
+            if (myRole !== 'host' || roomData?.state !== 'playing' || !roomData?.buzzerWinner || !roomData?.answerDeadline) return;
+            const qIndex = roomData.qIndex;
+            const winner = roomData.buzzerWinner;
+            const deadline = roomData.answerDeadline;
+            const key = `${qIndex}:${winner}:${deadline}`;
+            const delay = Math.max(0, deadline + ANSWER_TIMEOUT_GRACE_MS - Date.now());
+            const timer = setTimeout(async () => {
+              if (hostTimeoutSettled.current === key) return;
+              hostTimeoutSettled.current = key;
+              try {
+                const result = await runRoomTransaction((data) => {
+                  const now = Date.now();
+                  if (data.state !== 'playing') return null;
+                  if (data.qIndex !== qIndex || data.buzzerWinner !== winner || data.answerDeadline !== deadline) return null;
+                  if (now < deadline + ANSWER_TIMEOUT_GRACE_MS) return null;
+                  return { ...buildWrongAnswerUpdate(data, winner, '超時', now), qIndex: data.qIndex };
+                });
+                if (result?.shouldAdvance) setTimeout(() => nextQ(result.qIndex), 1500);
+                if (!result) hostTimeoutSettled.current = null;
+              } catch (_) {
+                hostTimeoutSettled.current = null;
+              }
+            }, delay);
+            return () => clearTimeout(timer);
+          }, [myRole, roomData?.state, roomData?.qIndex, roomData?.buzzerWinner, roomData?.answerDeadline]);
 
           // 音效 + 答對/答錯動畫：正常題目用
           useEffect(() => {
@@ -1026,14 +1074,14 @@
             }
           }, [roomData?.state]);
 
-          // 心跳：每 25 秒寫入（供斷線偵測）
+          // 心跳：降低同房多裝置同時寫入頻率，減少遊戲中不必要的同步抖動
           useEffect(() => {
             if (!roomCode || !myRole) return;
             const write = () => db.collection('rooms_v2').doc(roomCode).update({
               [`heartbeats.${myRole}`]: Date.now()
             }).catch(() => {});
             write();
-            const iv = setInterval(write, 25000);
+            const iv = setInterval(write, HEARTBEAT_INTERVAL_MS);
             return () => clearInterval(iv);
           }, [roomCode, myRole]);
 
@@ -1043,11 +1091,11 @@
             if (!['playing', 'countdown', 'surprise', 'bossIntro', 'bossBetting', 'bossResult'].includes(roomData.state)) return;
             const hb = roomData.heartbeats?.host;
             if (!hb || hb === 0) return; // host 從未連過，不誤判
-            if (Date.now() - hb > 60000) {
+            if (Date.now() - hb > OFFLINE_AFTER_MS) {
               runRoomTransaction((data) => {
                 if (!['playing', 'countdown', 'surprise', 'bossIntro', 'bossBetting', 'bossResult'].includes(data.state)) return null;
                 const freshHb = data.heartbeats?.host;
-                if (!freshHb || Date.now() - freshHb <= 60000) return null;
+                if (!freshHb || Date.now() - freshHb <= OFFLINE_AFTER_MS) return null;
                 return {
                   updates: {
                     state: 'end',
@@ -1234,12 +1282,14 @@
             }
           }, [roomData?.state, roomData?.bossEvent?.resolved, roomData?.bossEvent?.revealedAt, myRole]);
 
-          // 技能遮罩自動清除（由發動者的客戶端負責）
+          // 技能遮罩自動清除；發動者卡住時，老師端會延後接手清除
           useEffect(() => {
             if (!roomData?.cardOverlay || !roomCode) return;
             const { showUntil, remainingMs, playerGroup } = roomData.cardOverlay;
-            if (playerGroup !== myRole) return;
-            const delay = Math.max(0, showUntil - Date.now());
+            const isOwner = playerGroup === myRole;
+            const isHostFallback = myRole === 'host';
+            if (!isOwner && !isHostFallback) return;
+            const delay = Math.max(0, showUntil - Date.now()) + (isOwner ? 0 : CARD_OVERLAY_HOST_GRACE_MS);
             const timer = setTimeout(() => {
               runRoomTransaction((data) => {
                 const ov = data.cardOverlay;
@@ -1313,7 +1363,9 @@
           };
 
           const createRoom = async () => {
+            if (entryBusy) return;
             if (!user) { showError("尚未連線到伺服器，請稍候再試！"); return; }
+            setEntryBusy('create');
             try {
               const code = Math.random().toString(36).substring(2, 6).toUpperCase();
               await db.collection('rooms_v2').doc(code).set({
@@ -1345,23 +1397,36 @@
               });
               setRoomCode(code);
               setMyRole('host');
-            } catch (e) { showError("建立房間失敗：" + e.message); }
+            } catch (e) {
+              showError("建立房間失敗：" + e.message);
+            } finally {
+              setEntryBusy(null);
+            }
           };
 
           const joinRoom = async () => {
+            if (entryBusy) return;
             if (!user) { showError("連線中，請稍候！"); return; }
-            if (!joinInput || joinInput.length !== 4) { showError("請輸入正確的 4 碼房間代碼！"); return; }
+            const code = normalizeRoomCode(joinInput);
+            if (code.length !== 4) { showError("請輸入正確的 4 碼房間代碼！"); return; }
+            setJoinInput(code);
+            setEntryBusy('join');
             try {
-              const code = joinInput.toUpperCase();
               const snap = await db.collection('rooms_v2').doc(code).get();
               if (snap.exists) setRoomCode(code);
               else showError(`找不到代碼為「${code}」的房間！\n請確認老師大螢幕上的代碼。`);
-            } catch (e) { showError("加入房間失敗：" + e.message); }
+            } catch (e) {
+              showError("加入房間失敗：" + e.message);
+            } finally {
+              setEntryBusy(null);
+            }
           };
 
           const selectGroup = async (gid) => {
+            if (entryBusy) return;
             if (!roomData) return;
             if (roomData.teams[gid].joined) { showError("手腳太慢！此組別已被選走了。"); return; }
+            setEntryBusy('select');
             try {
               await runRoomTransaction((data) => {
                 if (data.state !== 'lobby') throw new Error('遊戲已開始，無法再選擇陣營。');
@@ -1376,12 +1441,20 @@
                 };
               });
               setMyRole(gid);
-            } catch (e) { showError("選擇組別時發生錯誤：" + e.message); }
+              setPendingGroup(null);
+              setCardRevealed(false);
+            } catch (e) {
+              showError("選擇組別時發生錯誤：" + e.message);
+            } finally {
+              setEntryBusy(null);
+            }
           };
 
-          const leaveRoom = () => { setRoomCode(''); setRoomData(null); setMyRole(null); };
+          const leaveRoom = () => { setRoomCode(''); setRoomData(null); setMyRole(null); setEntryBusy(null); };
 
           const startSync = async () => {
+            if (entryBusy) return;
+            setEntryBusy('start');
             try {
               await runRoomTransaction((data) => {
                 if (data.state !== 'lobby') throw new Error('目前不能啟動遊戲。');
@@ -1395,6 +1468,8 @@
               });
             } catch (e) {
               showError("啟動失敗：" + e.message);
+            } finally {
+              setEntryBusy(null);
             }
           };
 
@@ -2309,6 +2384,8 @@
           // ── 畫面分支 ──────────────────────────────────────────
 
           if (isConnecting) return <div className="h-full flex items-center justify-center font-bold app-overlay">連線中...</div>;
+          const entryLocked = !!entryBusy || !user;
+          const joinCodeReady = normalizeRoomCode(joinInput).length === 4;
 
           if (!roomCode) return (
             <div className="h-full flex flex-col items-center justify-center p-6 space-y-6 app-overlay">
@@ -2316,10 +2393,26 @@
               <h1 className="text-4xl font-black">五院大亂鬥</h1>
               <p className="app-text-3 font-mono text-[10px]">Build: {BUILD}</p>
               <div className="w-full max-w-sm app-card p-6 rounded-3xl border-2 app-border shadow-xl space-y-4">
-                <button onClick={createRoom} className="w-full text-white py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition" style={{ backgroundColor:'#75809C' }}>建立房間（老師）</button>
+                <button onClick={createRoom} disabled={entryLocked}
+                  className="w-full text-white py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition disabled:opacity-60 disabled:active:scale-100"
+                  style={{ backgroundColor:'#75809C' }}>
+                  {entryBusy === 'create' ? '建立中...' : '建立房間（老師）'}
+                </button>
                 <div className="h-px app-card-2"></div>
-                <input value={joinInput} onChange={e => setJoinInput(e.target.value.toUpperCase())} maxLength={4} placeholder="輸入 4 碼代碼" className="w-full app-card-2 p-5 rounded-2xl text-center text-2xl font-bold border-2 app-border focus:border-blue-500 outline-none" />
-                <button onClick={joinRoom} disabled={joinInput.length !== 4} className="w-full bg-blue-500 text-white disabled:bg-stone-300 disabled:text-stone-500 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition">加入遊戲（學生）</button>
+                <input value={joinInput}
+                  onChange={e => setJoinInput(normalizeRoomCode(e.target.value))}
+                  onKeyDown={e => { if (e.key === 'Enter' && joinCodeReady && !entryLocked) joinRoom(); }}
+                  disabled={entryLocked}
+                  maxLength={4}
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  placeholder="輸入 4 碼代碼"
+                  className="w-full app-card-2 p-5 rounded-2xl text-center text-2xl font-bold border-2 app-border focus:border-blue-500 outline-none disabled:opacity-60" />
+                <button onClick={joinRoom} disabled={entryLocked || !joinCodeReady}
+                  className="w-full bg-blue-500 text-white disabled:bg-stone-300 disabled:text-stone-500 py-6 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition disabled:active:scale-100">
+                  {entryBusy === 'join' ? '加入中...' : '加入遊戲（學生）'}
+                </button>
+                {!user && <p className="text-center text-xs text-rose-500 font-bold">伺服器連線尚未完成，請稍候。</p>}
               </div>
               <button onClick={() => { setShowRules(true); setRulesTab(0); }}
                 className="app-text-3 text-sm font-bold underline underline-offset-4 active:opacity-70">
@@ -2351,7 +2444,7 @@
                     <div className="flex flex-wrap justify-center gap-2 mb-6">
                       {Object.values(roomData.teams).map(t => {
                         const hb = roomData.heartbeats?.[t.id] || 0;
-                        const offline = t.joined && hb > 0 && (Date.now() - hb) > 60000;
+                        const offline = t.joined && hb > 0 && (Date.now() - hb) > OFFLINE_AFTER_MS;
                         return (
                           <span key={t.id} className={`px-3 py-1.5 rounded-full font-bold text-xs border-2
                             ${offline ? 'bg-rose-100 border-rose-400 text-rose-700'
@@ -2362,14 +2455,18 @@
                         );
                       })}
                     </div>
-                    <button onClick={startSync} className="w-full text-white py-4 rounded-full font-black text-xl active:scale-95 transition" style={{ backgroundColor:'#75809C' }}>同步啟動</button>
+                    <button onClick={startSync} disabled={entryBusy === 'start'}
+                      className="w-full text-white py-4 rounded-full font-black text-xl active:scale-95 transition disabled:opacity-60 disabled:active:scale-100"
+                      style={{ backgroundColor:'#75809C' }}>
+                      {entryBusy === 'start' ? '啟動中...' : '同步啟動'}
+                    </button>
                   </div>
                 ) : !myRole ? (
                   <div>
                   <p className="app-text font-bold text-lg mb-4">請選擇你的陣營</p>
                   <div className="grid grid-cols-2 gap-3">
                     {Object.values(roomData.teams).map(t => (
-                      <button key={t.id} onClick={() => handleGroupSelect(t)} disabled={t.joined}
+                      <button key={t.id} onClick={() => handleGroupSelect(t)} disabled={t.joined || !!entryBusy}
                         className={`p-4 rounded-xl font-black text-sm transition text-white
                           ${t.joined ? 'app-card-2 app-text-3 opacity-50' : `${t.yuan?.color} active:scale-95`}`}>
                         {t.yuan?.name}
@@ -2402,8 +2499,8 @@
 
                     {/* 共同卡抽取 */}
                     {!cardRevealed ? (
-                      <button onClick={() => { sound.draw(); setCardRevealed(true); }}
-                        className="w-full bg-purple-500 text-white py-4 rounded-2xl font-black text-base active:scale-95 transition animate-pulse">
+                      <button onClick={() => { sound.draw(); setCardRevealed(true); }} disabled={entryBusy === 'select'}
+                        className="w-full bg-purple-500 text-white py-4 rounded-2xl font-black text-base active:scale-95 transition animate-pulse disabled:opacity-60">
                         🎴 抽取共同技能卡
                       </button>
                     ) : (
@@ -2417,9 +2514,9 @@
                     )}
 
                     {cardRevealed && (
-                      <button onClick={() => { selectGroup(pendingGroup.gid); setPendingGroup(null); setCardRevealed(false); }}
-                        className="w-full bg-emerald-500 text-white py-5 rounded-2xl font-black text-xl active:scale-95 transition">
-                        ✅ 確認加入！
+                      <button onClick={() => selectGroup(pendingGroup.gid)} disabled={entryBusy === 'select'}
+                        className="w-full bg-emerald-500 text-white py-5 rounded-2xl font-black text-xl active:scale-95 transition disabled:opacity-60 disabled:active:scale-100">
+                        {entryBusy === 'select' ? '加入中...' : '✅ 確認加入！'}
                       </button>
                     )}
                     {!cardRevealed && (
