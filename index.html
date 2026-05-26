@@ -355,7 +355,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260526-01';
+        const BUILD = '20260526-02';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -377,13 +377,13 @@
 
         // 共同抽牌卡堆（10 種）
         const COMMON_CARD_POOL = [
-          { id: 'c01', name: '甲級動員',   desc: '下一回合本組享有絕對優先搶答權（答錯則開放其他組）',        type: 'priority-next' },
+          { id: 'c01', name: '甲級動員',   desc: '下一回合本組直接回答題目（答錯才開放其他組搶答）',        type: 'priority-next' },
           { id: 'c02', name: '重大建設',   desc: '本回合若答對，得分乘以 2（共 80 分）',                      type: 'double-points' },
           { id: 'c03', name: '社會福利',   desc: '強制最高分組轉移 20 分給最低分組',                          type: 'redistribute'  },
           { id: 'c04', name: '機密外洩',   desc: '奪走指定院的五院專屬技能卡，納為己用（對方失去）',          type: 'steal-exclusive' },
           { id: 'c05', name: '擴權爭議',   desc: '盲抽指定組手中一張未使用的共同卡，納為己用',               type: 'steal-common'  },
           { id: 'c06', name: '輿論炎上',   desc: '指定一組：下回合禁止使用任何技能卡',                        type: 'card-ban'      },
-          { id: 'c07', name: '民意支持',   desc: '護身符：遭受攻擊時可立即抵銷一次傷害（保留備用）',          type: 'shield'        },
+          { id: 'c07', name: '民意支持',   desc: '護身符：遭受扣分攻擊時自動打出並抵銷一次傷害',          type: 'shield'        },
           { id: 'c08', name: '朝野協商',   desc: '指定一組結盟：下回合對方答對，本組免費獲一半分數',          type: 'alliance'      },
           { id: 'c09', name: '選區重劃',   desc: '全場分數往左傳給下一組',                                  type: 'rotate'        },
           { id: 'c10', name: '特別預算',   desc: '全場各加 10 分；本組另外再抽 1 張共同卡',                   type: 'all-bonus'     },
@@ -438,13 +438,13 @@
         ];
 
         const RULES_COMMON_CARDS = [
-          { id:'c01', name:'甲級動員', desc:'下一回合本組享有絕對優先搶答權，不需比手速。若答錯則開放其他組搶答。', tag:'搶答優勢', tagColor:'bg-emerald-100 text-emerald-700', emoji:'⚡' },
+          { id:'c01', name:'甲級動員', desc:'下一回合本組直接取得作答權，不需搶答。若答錯才開放其他組搶答。', tag:'直接作答', tagColor:'bg-emerald-100 text-emerald-700', emoji:'⚡' },
           { id:'c02', name:'重大建設', desc:'本回合若搶答正確，得分直接乘以 2（+80 分）。', tag:'得分翻倍', tagColor:'bg-yellow-100 text-yellow-700', emoji:'🏗️' },
           { id:'c03', name:'社會福利', desc:'強制全場分數最高的組別，無條件轉移 20 分給分數最低的組別。', tag:'縮小差距', tagColor:'bg-blue-100 text-blue-700', emoji:'🤝' },
           { id:'c04', name:'機密外洩', desc:'指定一組，直接奪走對方的五院專屬技能卡，納為己用。對方永久失去該技能。', tag:'竊取技能', tagColor:'bg-rose-100 text-rose-700', emoji:'🕵️' },
           { id:'c05', name:'擴權爭議', desc:'隨機從指定一組手中，盲抽一張未使用的共同卡，納為己用。若對方無共同卡則無效。', tag:'竊取資源', tagColor:'bg-orange-100 text-orange-700', emoji:'👐' },
           { id:'c06', name:'輿論炎上', desc:'讓指定一組深陷公關危機，下一回合禁止使用任何技能卡（含院專屬卡）。', tag:'封印技能', tagColor:'bg-red-100 text-red-700', emoji:'🔥' },
-          { id:'c07', name:'民意支持', desc:'護身符！可保留在手中。當遭受任何扣分攻擊時立即打出，完全抵銷該次攻擊。', tag:'完全防禦', tagColor:'bg-cyan-100 text-cyan-700', emoji:'🛡️' },
+          { id:'c07', name:'民意支持', desc:'護身符！保留在手中即可。當遭受任何扣分攻擊時自動打出，完全抵銷該次攻擊。', tag:'自動防禦', tagColor:'bg-cyan-100 text-cyan-700', emoji:'🛡️' },
           { id:'c08', name:'朝野協商', desc:'指定另一組強行結盟。下一回合只要對方答題得分，本組免費獲得一半的分數。', tag:'結盟收益', tagColor:'bg-teal-100 text-teal-700', emoji:'🤜🤛' },
           { id:'c09', name:'選區重劃', desc:'全場所有組別必須將目前分數往左邊傳交給下一組。', tag:'全場大亂', tagColor:'bg-violet-100 text-violet-700', emoji:'🔄' },
           { id:'c10', name:'特別預算', desc:'國庫撥款！全場所有組別各加 10 分，本組另外再免費抽 1 張共同卡。', tag:'全場加分', tagColor:'bg-pink-100 text-pink-700', emoji:'💰' },
@@ -452,13 +452,13 @@
 
         // 共同卡完整說明（CardRule.txt 原文）
         const COMMON_CARD_FULL_DESC = {
-          c01: '發動後，下一回合的題目，該組擁有「絕對優先搶答權」（不需比拼手速）。若答錯，則開放其他組搶答。',
+          c01: '發動後，下一回合的題目，該組直接取得作答權（不需比拼手速、不需按搶答）。若答錯，才開放其他組搶答。',
           c02: '發動此卡的回合，若該組搶答正確，該題獲得的分數「直接乘以 2 倍」（共 80 分）。',
           c03: '強制目前全場「分數最高」的組別，無條件轉移 20 分給目前「分數最低」的組別（若自己最低，就是轉給自己）。',
           c04: '指定任一組，直接奪走對方的「五院專屬技能卡」納為己用（對方失去該技能，且你可以發動一次該院專屬技能）。',
           c05: '隨機從指定的一組手中，盲抽（偷走）一張他們尚未使用的「共同抽牌卡」，納為己用。若對方沒有共同卡則無效。',
           c06: '讓指定的一組深陷公關危機。該組在「下一回合」中，雖然可以正常搶答得分，但「禁止發動任何卡牌技能（含五院專屬卡與共同卡）」。',
-          c07: '這是一張「護身符」，可蓋牌保留在手中。當遭受任何扣分攻擊（包含五院專屬技能或其他卡牌）時可立即翻開，完全「抵銷該次攻擊」。',
+          c07: '這是一張「護身符」，保留在手中即可。當遭受任何扣分攻擊（包含五院專屬技能或其他卡牌）時會自動翻開，完全「抵銷該次攻擊」。',
           c08: '指定另一組強行結盟。在「下一回合」中，只要該組答題得分，發動此卡的組別也能「免費獲得一半的分數」。',
           c09: '全場五個組別必須將目前所有分數，全部統一往左邊傳交給下一組。',
           c10: '國庫撥款！發動後，場上所有組別（包含自己）立刻各加 10 分。作為代價，發動此卡的組別可以在牌堆中免費「抽 1 張」新的共同卡。',
@@ -618,6 +618,56 @@
           return next;
         };
 
+        const consumePriorityAnswer = (statusEffects = {}, data = {}, qIndex) => {
+          const next = clonePlain(statusEffects);
+          const priorityIds = GROUP_IDS.filter(gid =>
+            next[gid]?.priorityBuzz && next[gid].priorityBuzzQIndex === qIndex
+          );
+          const priorityGroup = priorityIds.find(gid =>
+            data.teams?.[gid]?.joined && (data.scores?.[gid] || 0) > 0
+          ) || null;
+          priorityIds.forEach(gid => {
+            if (!next[gid]) next[gid] = {};
+            next[gid].priorityBuzz = false;
+            next[gid].priorityBuzzQIndex = null;
+          });
+          return { statusEffects: next, priorityGroup };
+        };
+
+        const buildPlayingQuestionUpdate = (data, qIndex, now, statusEffects) => {
+          const priority = consumePriorityAnswer(statusEffects, data, qIndex);
+          const priorityGroup = priority.priorityGroup;
+          const team = priorityGroup ? data.teams?.[priorityGroup] : null;
+          const updates = {
+            qIndex,
+            buzzerWinner: priorityGroup,
+            state: 'playing',
+            buzzerOpenAt: priorityGroup ? 0 : now + BUZZ_DELAY_NEW_Q * 1000,
+            answerDeadline: priorityGroup ? now + ANSWER_TIME_LIMIT * 1000 : null,
+            wrongAnswerers: [],
+            statusEffects: priority.statusEffects,
+            cardOverlay: null,
+            surpriseEvent: null,
+          };
+          if (priorityGroup) {
+            updates.actionLog = [
+              `⚡ ${team?.yuan?.name || '有組別'} 發動甲級動員，直接回答第 ${qIndex + 1} 題！`,
+              ...(data.actionLog || [])
+            ].slice(0, 5);
+          }
+          return updates;
+        };
+
+        const consumeAutoShieldCard = (hands = {}, targetId, qIndex) => {
+          const hand = hands[targetId];
+          if (!Array.isArray(hand)) return null;
+          const idx = hand.findIndex(c => !c.isExclusive && c.id === 'c07' && c.usedOnQ === null);
+          if (idx === -1) return null;
+          const card = hand[idx];
+          hands[targetId][idx] = { ...card, usedOnQ: qIndex };
+          return card;
+        };
+
         const applyExamPayment = (data, role, scoresIn) => {
           const newScores = { ...(scoresIn || {}) };
           const mustPay = data.statusEffects?.[role]?.mustPayExam;
@@ -720,18 +770,9 @@
             };
           }
 
-          return data.qIndex + 1 < (data.questions || []).length
-            ? {
-                qIndex: data.qIndex + 1,
-                buzzerWinner: null,
-                state: 'playing',
-                buzzerOpenAt: now + BUZZ_DELAY_NEW_Q * 1000,
-                answerDeadline: null,
-                wrongAnswerers: [],
-                statusEffects: newStatus,
-                cardOverlay: null,
-                surpriseEvent: null,
-              }
+          const nextQIndex = data.qIndex + 1;
+          return nextQIndex < (data.questions || []).length
+            ? buildPlayingQuestionUpdate(data, nextQIndex, now, newStatus)
             : { state: 'end', cardOverlay: null, surpriseEvent: null };
         };
 
@@ -1494,6 +1535,7 @@
                 const activeCard = freshHand.find(c => c.uniqueId === card.uniqueId);
                 if (!activeCard) throw new Error('找不到這張技能卡。');
                 if (activeCard.usedOnQ !== null) throw new Error('這張技能卡已使用。');
+                if (activeCard.type === 'shield') throw new Error('民意支持會在被扣分攻擊時自動打出。');
                 if (freshHand.some(c => c.usedOnQ === data.qIndex)) throw new Error('本回合只能發動一張技能卡。');
 
                 const needsTarget = ['target','steal-exclusive','steal-common','card-ban','alliance'].includes(activeCard.type);
@@ -1509,16 +1551,24 @@
                 let statusEffects = clonePlain(data.statusEffects || {});
                 let hands = clonePlain(data.hands || {});
                 let log = `⚡ ${myYuan} 發動「${activeCard.name}」`;
+                let targetBlocked = false;
 
                 hands[myRole] = hands[myRole].map(c =>
                   c.uniqueId === activeCard.uniqueId ? { ...c, usedOnQ: data.qIndex } : c
                 );
 
                 switch (activeCard.type) {
-                  case 'target':
-                    if (statusEffects[targetId]?.shielded) {
+                  case 'target': {
+                    const autoShieldCard = statusEffects[targetId]?.shielded
+                      ? null
+                      : consumeAutoShieldCard(hands, targetId, data.qIndex);
+                    if (statusEffects[targetId]?.shielded || autoShieldCard) {
+                      if (!statusEffects[targetId]) statusEffects[targetId] = {};
                       statusEffects[targetId].shielded = false;
-                      log += `，但 ${targetYuan} 護盾抵銷了傷害！`;
+                      targetBlocked = true;
+                      log += autoShieldCard
+                        ? `，但 ${targetYuan} 自動打出【民意支持】抵銷了攻擊！`
+                        : `，但 ${targetYuan} 護盾抵銷了傷害！`;
                     } else if (activeCard.id === 'con') {
                       let discarded = null;
                       if (hands[targetId]) {
@@ -1539,6 +1589,7 @@
                       log += `，鎖定 ${targetYuan}（-${activeCard.dmg || 50} 分）`;
                     }
                     break;
+                  }
                   case 'self':
                     if (!statusEffects[myRole]) statusEffects[myRole] = {};
                     statusEffects[myRole].shielded = true;
@@ -1581,7 +1632,7 @@
                     if (!statusEffects[myRole]) statusEffects[myRole] = {};
                     statusEffects[myRole].priorityBuzz = true;
                     statusEffects[myRole].priorityBuzzQIndex = data.qIndex + 1;
-                    log += `，下一回合享優先搶答權`;
+                    log += `，下一回合直接取得作答權`;
                     break;
                   case 'auto':
                     { const lw = data.lastRoundWinner, lp = data.lastRoundPoints || 0;
@@ -1648,6 +1699,7 @@
                   const before = data.scores?.[targetId] ?? 0;
                   const after = scores[targetId] ?? 0;
                   if (before !== after) targetDelta = after - before;
+                  else if (targetBlocked) targetDelta = 0;
                 }
 
                 return {
@@ -1787,18 +1839,13 @@
                 if (expectedResolvedAt && freshEv.resolvedAt !== expectedResolvedAt) return null;
                 const nextIdx = data.qIndex + 1;
                 const hasMore = nextIdx < (data.questions || []).length;
+                const now = Date.now();
+                const nextStatus = clearRoundStatusEffects(data.statusEffects || {});
                 return {
                   advanced: true,
-                  updates: {
-                    state: hasMore ? 'playing' : 'end',
-                    qIndex: hasMore ? nextIdx : data.qIndex,
-                    buzzerOpenAt: hasMore ? Date.now() + BUZZ_DELAY_NEW_Q * 1000 : 0,
-                    buzzerWinner: null,
-                    answerDeadline: null,
-                    wrongAnswerers: [],
-                    surpriseEvent: null,
-                    cardOverlay: null,
-                  }
+                  updates: hasMore
+                    ? buildPlayingQuestionUpdate(data, nextIdx, now, nextStatus)
+                    : { state: 'end', surpriseEvent: null, cardOverlay: null }
                 };
               });
               if (!result?.advanced) surpriseAdvancing.current = false;
@@ -2009,15 +2056,16 @@
                       <div className="p-2 space-y-1.5">
                         {visibleCards.map(card => {
                           const permanentlyUsed = card.usedOnQ !== null;
-                          const canActivate = !cardBanned && !alreadyPlayedThisRound && !permanentlyUsed;
+                          const autoOnly = card.type === 'shield';
+                          const canActivate = !autoOnly && !cardBanned && !alreadyPlayedThisRound && !permanentlyUsed;
                           return (
                             <button key={card.uniqueId}
                               onClick={() => { if (!canActivate) return; needsTarget(card) ? setPendingCard(card) : playCard(card); }}
                               className="w-full flex items-start gap-2 rounded-xl text-left transition"
                               style={{
                                 padding: '0.5rem 0.625rem',
-                                opacity: canActivate ? 1 : 0.45,
-                                cursor: canActivate ? 'pointer' : 'not-allowed',
+                                opacity: permanentlyUsed ? 0.45 : autoOnly ? 1 : canActivate ? 1 : 0.45,
+                                cursor: autoOnly && !permanentlyUsed ? 'default' : canActivate ? 'pointer' : 'not-allowed',
                                 background: permanentlyUsed ? 'rgba(180,170,150,0.25)'
                                   : card.isExclusive ? 'rgba(212,180,131,0.20)' : 'rgba(110,129,148,0.18)',
                                 border: `1px solid ${permanentlyUsed ? '#C8BCA6' : card.isExclusive ? 'rgba(212,180,131,0.55)' : 'rgba(110,129,148,0.55)'}`,
@@ -2033,7 +2081,9 @@
                                   </p>
                                 )}
                               </div>
-                              {canActivate && (
+                              {autoOnly && !permanentlyUsed ? (
+                                <span className="shrink-0 text-[10px] font-black text-blue-700 px-1.5 py-0.5 rounded self-center bg-blue-100">自動</span>
+                              ) : canActivate && (
                                 <span className="shrink-0 text-[10px] font-black app-accent-text px-1.5 py-0.5 rounded self-center" style={{ background:'rgba(157,144,119,0.20)' }}>發動</span>
                               )}
                             </button>
