@@ -150,6 +150,43 @@
           animation: bossScan 1.2s linear infinite;
         }
         .boss-warning-pop { animation: bossWarningPop 0.9s ease-in-out infinite; }
+
+        /* ── 最終結算：學生端雙頁滑動 ───────────────────────── */
+        @keyframes finalRise {
+          0% { transform: translateY(100%); opacity: 0; }
+          65% { transform: translateY(-3%); opacity: 1; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes finalCardRise {
+          0% { transform: translateY(26px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes finalRankPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.04); }
+        }
+        .final-scroll {
+          display: flex;
+          width: 100%;
+          height: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+          scroll-snap-type: x mandatory;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-x;
+        }
+        .final-scroll::-webkit-scrollbar { display: none; }
+        .final-page {
+          flex: 0 0 100%;
+          width: 100%;
+          min-width: 100%;
+          height: 100%;
+          scroll-snap-align: start;
+          scroll-snap-stop: always;
+        }
+        .final-rise { animation: finalRise 0.78s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .final-card-rise { animation: finalCardRise 0.58s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .final-rank-pulse { animation: finalRankPulse 1.65s ease-in-out infinite; }
     </style>
 </head>
 <body class="app-text overflow-hidden select-none">
@@ -356,7 +393,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const BUILD = '20260526-04';
+        const BUILD = '20260530-01';
 
         // 莫蘭迪色系（依 color.png 設計）— 改用 CSS class 寫死，確保各種動態場合都能渲染
         const YUAN_DB = [
@@ -639,6 +676,23 @@
 
         const bossParticipantIds = (data = {}) =>
           joinedGroupIds(data.teams).filter(gid => (data.scores?.[gid] || 0) > 0);
+
+        const buildFinalRanking = (teams = {}, scores = {}) => {
+          const allTeams = Object.values(teams || {});
+          const joinedTeams = allTeams.filter(t => t.joined);
+          const source = joinedTeams.length ? joinedTeams : allTeams;
+          let previousScore = null;
+          let previousRank = 0;
+          return source
+            .map(t => ({ ...t, score: scores?.[t.id] ?? 0 }))
+            .sort((a, b) => b.score - a.score)
+            .map((t, idx) => {
+              const rank = previousScore === t.score ? previousRank : idx + 1;
+              previousScore = t.score;
+              previousRank = rank;
+              return { ...t, rank };
+            });
+        };
 
         const clearRoundStatusEffects = (statusEffects = {}) => {
           const next = clonePlain(statusEffects);
@@ -2856,34 +2910,153 @@
             );
           }
 
-          if (roomData.state === 'end') return (
-            <div className="h-full flex flex-col items-center justify-center p-6 app-overlay animate-fade-in">
-              <ErrorModal />
-              <div className="app-card p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm">
-                <div className="text-6xl mb-4">👑</div>
-                <h2 className="text-3xl font-black app-accent-text mb-6">戰鬥結束！</h2>
-                <div className="space-y-2 mb-8 text-left">
-                  {Object.values(roomData.teams)
-                    .sort((a, b) => (roomData.scores?.[b.id] ?? 0) - (roomData.scores?.[a.id] ?? 0))
-                    .map((t, idx) => (
+          if (roomData.state === 'end') {
+            const finalRanking = buildFinalRanking(roomData.teams, roomData.scores);
+            const myFinal = finalRanking.find(t => t.id === myRole) || finalRanking[0];
+            const myRank = myFinal?.rank ?? '-';
+            const myScore = myFinal?.score ?? 0;
+            const myTeamName = myFinal?.yuan?.name || '你的組別';
+            const rankTone = myRank === 1 ? 'border-yellow-400 bg-yellow-50'
+              : myRank === 2 ? 'border-slate-300 bg-slate-50'
+              : myRank === 3 ? 'border-amber-600 bg-amber-50'
+              : 'app-border app-card';
+            const rankTitle = myRank === 1 ? '冠軍' : `第 ${myRank} 名`;
+            const aheadCount = Math.max(0, Number(myRank) - 1);
+            const behindCount = Math.max(0, finalRanking.length - Number(myRank));
+
+            if (myRole === 'host') return (
+              <div className="h-full flex flex-col items-center justify-center p-6 app-overlay animate-fade-in">
+                <ErrorModal />
+                <div className="app-card p-8 rounded-3xl border-4 border-yellow-500 text-center shadow-2xl w-full max-w-sm">
+                  <div className="text-6xl mb-4">👑</div>
+                  <h2 className="text-3xl font-black app-accent-text mb-6">戰鬥結束！</h2>
+                  <div className="space-y-2 mb-8 text-left">
+                    {finalRanking.map((t) => (
                       <div key={t.id} className="flex justify-between items-center app-card-2 px-4 py-3 rounded-xl">
                         <span className="font-black flex items-center gap-2">
-                          <span className="app-text-3 text-sm w-4">{idx + 1}.</span>
+                          <span className="app-text-3 text-sm w-5">{t.rank}.</span>
                           <span className={t.yuan?.text}>{t.yuan?.name}</span>
                           <span className="app-text-3 text-xs">{t.name}</span>
                         </span>
-                        <span className={`font-black ${(roomData.scores?.[t.id] ?? 0) > 0 ? 'app-accent-text' : 'text-rose-500'}`}>{roomData.scores?.[t.id] ?? 0} 分</span>
+                        <span className={`font-black ${t.score > 0 ? 'app-accent-text' : 'text-rose-500'}`}>{t.score} 分</span>
                       </div>
                     ))}
-                </div>
-                {myRole === 'host' ? (
+                  </div>
                   <button onClick={resetGame} className="w-full bg-white text-black py-4 rounded-full font-black text-lg active:scale-95 transition">重置房間，再戰一局</button>
-                ) : (
-                  <p className="app-text-3 font-bold animate-pulse">等待老師重置遊戲...</p>
-                )}
+                </div>
               </div>
-            </div>
-          );
+            );
+
+            return (
+              <div className="h-full overflow-hidden app-overlay">
+                <ErrorModal />
+                <div className="final-scroll">
+                  <section className="final-page relative p-5 flex flex-col justify-between overflow-hidden"
+                    style={{ background:'linear-gradient(180deg, rgba(45,50,58,0.88), rgba(247,242,232,0.72))' }}>
+                    <div className="absolute inset-0 opacity-25 pointer-events-none"
+                      style={{ backgroundImage:"url('bg.png')", backgroundSize:'cover', backgroundPosition:'center' }} />
+                    <div className="relative z-10 pt-8 text-center text-white">
+                      <p className="text-xs font-black tracking-[0.35em] text-white/70">FINAL RESULT</p>
+                      <h1 className="text-3xl font-black mt-2">你的最終名次</h1>
+                    </div>
+
+                    <div className="relative z-10 final-rise mx-auto w-full max-w-sm text-center">
+                      <div className={`mx-auto w-64 h-64 rounded-full border-4 ${rankTone} shadow-2xl flex flex-col items-center justify-center final-rank-pulse`}>
+                        <p className="text-sm font-black app-text-3 tracking-widest">RANK</p>
+                        <p className="text-[8.5rem] leading-none font-black app-accent-text">{myRank}</p>
+                        <p className={`text-2xl font-black ${myFinal?.yuan?.text || 'app-text'}`}>{rankTitle}</p>
+                      </div>
+                      <div className="mt-6 app-card-3 border-4 app-accent-border rounded-2xl p-5 shadow-2xl">
+                        <p className={`text-3xl font-black ${myFinal?.yuan?.text || 'app-text'}`}>{myTeamName}</p>
+                        <p className="text-sm app-text-3 font-bold mt-1">{myFinal?.name || ''}</p>
+                        <p className="mt-4 text-5xl font-black app-text">{myScore}<span className="text-base app-text-3 ml-1">分</span></p>
+                      </div>
+                    </div>
+
+                    <div className="relative z-10 grid grid-cols-3 gap-2 w-full max-w-sm mx-auto">
+                      {[
+                        { label:'領先組數', value: behindCount },
+                        { label:'總參賽組', value: finalRanking.length },
+                        { label:'前方組數', value: aheadCount },
+                      ].map((item, idx) => (
+                        <div key={item.label} className="final-card-rise app-card border-2 app-border rounded-xl p-3 text-center shadow-lg"
+                          style={{ animationDelay:`${idx * 90 + 260}ms` }}>
+                          <p className="text-[10px] app-text-3 font-black">{item.label}</p>
+                          <p className="text-2xl font-black app-accent-text mt-1">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="relative z-10 text-center pb-2">
+                      <p className="text-xs text-white/85 font-bold mb-3">左滑查看全組結算</p>
+                      <div className="flex justify-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-yellow-400 shadow"></span>
+                        <span className="w-3 h-3 rounded-full bg-white/45"></span>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="final-page relative p-5 overflow-hidden"
+                    style={{ background:'linear-gradient(180deg, rgba(247,242,232,0.95), rgba(242,235,222,0.88))' }}>
+                    <div className="h-full flex flex-col max-w-md mx-auto">
+                      <div className="shrink-0 text-center pt-6 pb-4">
+                        <p className="text-xs font-black app-text-3 tracking-[0.35em]">FINAL BOARD</p>
+                        <h2 className="text-3xl font-black app-text mt-2">最終結算</h2>
+                        <p className="text-sm app-text-3 font-bold mt-1">你的組別已用亮色標示</p>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto space-y-3 pr-1" style={{ WebkitOverflowScrolling:'touch' }}>
+                        {finalRanking.map((t, idx) => {
+                          const isMe = t.id === myRole;
+                          const isTop = t.rank === 1;
+                          return (
+                            <div key={t.id}
+                              className={`final-card-rise relative rounded-2xl border-4 p-4 shadow-lg overflow-hidden
+                                ${isMe ? 'bg-white border-yellow-400' : isTop ? 'bg-yellow-50 border-yellow-300' : 'app-card border-transparent'}`}
+                              style={{
+                                animationDelay:`${idx * 80}ms`,
+                                boxShadow: isMe ? `0 0 0 4px ${t.yuan?.hex || '#9D9077'}55, 0 12px 26px rgba(80,65,40,0.20)` : undefined
+                              }}>
+                              <div className="absolute inset-y-0 left-0 w-2" style={{ background:t.yuan?.hex || '#9D9077' }} />
+                              <div className="flex items-center gap-4">
+                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 border-2
+                                  ${isMe ? 'bg-yellow-400 border-yellow-500 text-white' : isTop ? 'bg-yellow-300 border-yellow-400 app-text' : 'app-card-2 app-border app-text'}`}>
+                                  <span className="text-4xl font-black">{t.rank}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className={`text-xl font-black ${t.yuan?.text || 'app-text'}`}>{t.yuan?.name}</p>
+                                    {isMe && <span className="px-2 py-1 rounded-full bg-yellow-400 text-white text-[10px] font-black">你的組別</span>}
+                                  </div>
+                                  <p className="text-xs app-text-3 font-bold mt-0.5">{t.name}</p>
+                                  <div className="mt-3 h-2 rounded-full app-card-2 overflow-hidden">
+                                    <div className={`h-full ${t.yuan?.color || 'app-accent-bg'}`} style={{ width:`${Math.max(8, Math.min(100, t.score))}%` }} />
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className={`text-3xl font-black ${isMe ? 'text-yellow-500' : t.score > 0 ? 'app-text' : 'text-rose-500'}`}>{t.score}</p>
+                                  <p className="text-xs app-text-3 font-bold">分</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="shrink-0 text-center pt-4 pb-2">
+                        <p className="app-text-3 font-bold text-xs mb-3">左右滑動可切換名次與總排行</p>
+                        <div className="flex justify-center gap-2">
+                          <span className="w-3 h-3 rounded-full bg-stone-300"></span>
+                          <span className="w-3 h-3 rounded-full bg-yellow-400 shadow"></span>
+                        </div>
+                        <p className="app-text-3 font-bold animate-pulse mt-4">等待老師重置遊戲...</p>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            );
+          }
 
           // ── 突發事件全員作答畫面 ──────────────────────────────
           if (roomData.state === 'surprise' && roomData.surpriseEvent) {
